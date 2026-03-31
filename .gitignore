@@ -1,0 +1,64 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Build outputs
+dist/
+build/
+*.exe
+*.o
+*.a
+*.so
+*.dylib
+
+# Go
+backend/pkg/
+backend/bin/
+*.test
+*.out
+go.sum
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Database (if using local files)
+*.db
+*.sqlite
+*.sqlite3
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Frontend
+frontend/dist/
+frontend/build/
+frontend/node_modules/
+
+# Backend binary
+backend/main
+backend/server
+
+# Coverage
+coverage/
+*.cover
+*.cov
+
+# Temp files
+tmp/
+temp/
+*.tmp

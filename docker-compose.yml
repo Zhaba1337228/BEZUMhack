@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: secretflow-db
+    environment:
+      POSTGRES_USER: secretflow
+      POSTGRES_PASSWORD: secretflow_password
+      POSTGRES_DB: secretflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U secretflow -d secretflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: secretflow-backend
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: secretflow
+      DB_USER: secretflow
+      DB_PASSWORD: secretflow_password
+      JWT_SECRET: super_secret_jwt_key_change_in_production
+      JWT_EXPIRY_HOURS: 24
+      BACKEND_PORT: 8080
+      BACKEND_HOST: 0.0.0.0
+      FRONTEND_URL: http://localhost:3000
+      ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:8080
+    container_name: secretflow-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
