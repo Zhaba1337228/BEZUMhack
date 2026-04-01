@@ -5,6 +5,7 @@ import (
 	"secretflow/internal/middleware"
 	"secretflow/internal/models"
 	"secretflow/internal/service"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -193,6 +194,15 @@ func SetupSecretsHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 				}
 				_ = grant // unused for now
 			}
+
+			BroadcastNotification(userID.(string), NotificationEvent{
+				ID:        accessReq.ID,
+				Type:      "request",
+				Title:     "Access Request Created",
+				Message:   "Your request is " + status + " for " + secret.Name,
+				Timestamp: time.Now(),
+				UserID:    userID.(string),
+			})
 
 			userIDStr := userID.(string)
 			auditService.Log(service.ActionSecretAccessRequest, &userIDStr,

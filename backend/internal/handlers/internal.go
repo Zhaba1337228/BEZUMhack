@@ -15,9 +15,9 @@ func SetupInternalHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 	auditService := service.NewAuditService(db)
 
 	// GET /api/internal/integrations/status - Integration health/status endpoint
-	// PATH 1 VULNERABILITY: Leaks auth_token for "debugging connectivity"
+	// SECURITY FIX: No longer leaks auth_token - only shows operational status
 	r.GET("/api/internal/integrations/status",
-		middleware.Auth(jwtSecret),
+		middleware.StrictAuth(jwtSecret),
 		func(c *gin.Context) {
 			integrations, err := models.ListIntegrations(db)
 			if err != nil {
@@ -33,9 +33,8 @@ func SetupInternalHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 				ProjectName string          `json:"project_name"`
 				Status      string          `json:"status"`
 				LastSync    *string         `json:"last_sync,omitempty"`
-				AuthToken   *string         `json:"auth_token,omitempty"` // PATH 1: Leaks token
 				WebhookURL  *string         `json:"webhook_url,omitempty"`
-				Config      *models.JSONMap `json:"config,omitempty"`
+				// SECURITY FIX: AuthToken field removed - tokens never exposed
 			}
 
 			var statuses []IntegrationStatus
@@ -43,14 +42,10 @@ func SetupInternalHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 				var tokens []models.IntegrationToken
 				db.Where("integration_id = ?", integration.ID).Find(&tokens)
 
-				var authToken *string
 				var lastSync *string
-				if len(tokens) > 0 {
-					authToken = &tokens[0].Token // PATH 1: Token leakage
-					if tokens[0].LastUsedAt != nil {
-						s := tokens[0].LastUsedAt.Format("2006-01-02T15:04:05Z")
-						lastSync = &s
-					}
+				if len(tokens) > 0 && tokens[0].LastUsedAt != nil {
+					s := tokens[0].LastUsedAt.Format("2006-01-02T15:04:05Z")
+					lastSync = &s
 				}
 
 				status := "connected"
@@ -73,9 +68,7 @@ func SetupInternalHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 					ProjectName: integration.ProjectName,
 					Status:      status,
 					LastSync:    lastSync,
-					AuthToken:   authToken,
 					WebhookURL:  webhookURL,
-					Config:      integration.Config,
 				})
 			}
 
@@ -92,9 +85,10 @@ func SetupInternalHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 		})
 
 	// GET /api/internal/integrations/test - Test integration connectivity
-	// PATH 1 VULNERABILITY: Leaks full token for "diagnostic purposes"
+	// SECURITY FIX: Only returns token preview, never full token
 	r.GET("/api/internal/integrations/test/:id",
-		middleware.Auth(jwtSecret),
+		middleware.StrictAuth(jwtSecret),
+		middleware.RequireRole("security_admin"),
 		func(c *gin.Context) {
 			integrationID := c.Param("id")
 
@@ -110,16 +104,17 @@ func SetupInternalHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 				return
 			}
 
+			// SECURITY FIX: Only show preview, never full token
 			testResult := map[string]interface{}{
 				"integration_id":   integration.ID,
 				"integration_name": integration.Name,
 				"provider":         integration.Provider,
 				"project":          integration.ProjectName,
 				"token_valid":      true,
-				"token_preview":    token.Token[:8] + "..." + token.Token[len(token.Token)-4:],
-				"token_full":       token.Token, // PATH 1: Full token leak
+				"token_preview":    token.Token[:min(8, len(token.Token))] + "..." + token.Token[max(0, len(token.Token)-4):],
 				"connection_test":  "success",
 				"last_used":        token.LastUsedAt,
+				// SECURITY: token_full removed - full token never exposed
 			}
 
 			c.JSON(http.StatusOK, gin.H{"test_result": testResult})
@@ -146,4 +141,20 @@ func contains(slice []string, item string) bool {
 		}
 	}
 	return false
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// max returns the maximum of two integers
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

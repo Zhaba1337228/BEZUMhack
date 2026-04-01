@@ -43,9 +43,13 @@ export default function SecretDetail() {
     setActionLoading(true)
     setError('')
     try {
-      await api.requestAccess(id, justification)
+      const data = await api.requestAccess(id, justification)
+      const status = data?.request?.status || 'pending'
       setSuccess('Access request submitted successfully')
-      setRequestStatus('pending')
+      setRequestStatus(status)
+      if (status === 'approved') {
+        setSecret((prev: any) => prev ? { ...prev, has_access: true } : prev)
+      }
       setJustification('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Request failed')

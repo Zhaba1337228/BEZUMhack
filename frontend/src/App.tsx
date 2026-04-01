@@ -44,6 +44,7 @@ function AppRoutes() {
       <Route path="/requests" element={
         <ProtectedRoute><MyRequests /></ProtectedRoute>
       } />
+      <Route path="/my-requests" element={<Navigate to="/requests" replace />} />
       <Route path="/requests/approvals" element={
         <ProtectedRoute allowedRoles={['team_lead', 'security_admin']}><Approvals /></ProtectedRoute>
       } />

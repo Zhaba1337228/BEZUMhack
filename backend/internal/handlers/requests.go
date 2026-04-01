@@ -5,6 +5,7 @@ import (
 	"secretflow/internal/middleware"
 	"secretflow/internal/models"
 	"secretflow/internal/service"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -88,6 +89,7 @@ func SetupRequestsHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 			userID, _ := c.Get("userID")
 
 			reqID := c.Param("id")
+			reqObj, _ := models.GetRequestByUUID(db, reqID)
 
 			// Get approver user
 			approver, err := models.GetUserByUUID(db, userID.(string))
@@ -115,6 +117,17 @@ func SetupRequestsHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 				"access_request", &reqID,
 				map[string]interface{}{"grant_id": grant.ID}, c.ClientIP())
 
+			if reqObj != nil {
+				BroadcastNotification(reqObj.UserID, NotificationEvent{
+					ID:        reqID,
+					Type:      "approval",
+					Title:     "Request Approved",
+					Message:   "Access approved for " + reqObj.Secret.Name,
+					Timestamp: time.Now(),
+					UserID:    reqObj.UserID,
+				})
+			}
+
 			c.JSON(http.StatusOK, gin.H{"grant": grant})
 		})
 
@@ -125,6 +138,7 @@ func SetupRequestsHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 			userID, _ := c.Get("userID")
 
 			reqID := c.Param("id")
+			reqObj, _ := models.GetRequestByUUID(db, reqID)
 
 			denier, err := models.GetUserByUUID(db, userID.(string))
 			if err != nil {
@@ -148,6 +162,17 @@ func SetupRequestsHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 			userIDStr := userID.(string)
 			auditService.Log(service.ActionRequestDenied, &userIDStr,
 				"access_request", &reqID, nil, c.ClientIP())
+
+			if reqObj != nil {
+				BroadcastNotification(reqObj.UserID, NotificationEvent{
+					ID:        reqID,
+					Type:      "alert",
+					Title:     "Request Denied",
+					Message:   "Access denied for " + reqObj.Secret.Name,
+					Timestamp: time.Now(),
+					UserID:    reqObj.UserID,
+				})
+			}
 
 			c.JSON(http.StatusOK, gin.H{"status": "denied"})
 		})

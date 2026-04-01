@@ -129,6 +129,36 @@ class ApiClient {
       body: JSON.stringify({ token, secret_id: secretId, justification }),
     })
   }
+
+  // Delegation endpoints (HARD Path 2)
+  async exchangeServiceToken(integrationToken: string, purpose: string) {
+    return this.request<{ service_token: string; expires_at: string; scope: string }>(
+      '/api/service-account/exchange',
+      {
+        method: 'POST',
+        body: JSON.stringify({ integration_token: integrationToken, purpose }),
+      }
+    )
+  }
+
+  async delegateAccess(secretId: string, targetUserId: string, justification: string, durationHours?: number) {
+    return this.request<{ grant_id: string; secret_id: string; user_id: string; expires_at: string; delegated_by: string }>(
+      '/api/delegate/access',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          secret_id: secretId,
+          target_user_id: targetUserId,
+          justification,
+          duration_hours: durationHours,
+        }),
+      }
+    )
+  }
+
+  async getDelegateInfo() {
+    return this.request<any>('/api/delegate/info')
+  }
 }
 
 export const api = new ApiClient()

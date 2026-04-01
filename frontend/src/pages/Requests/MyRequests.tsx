@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { api } from '../../services/api'
 import {
   FileText,
@@ -10,20 +10,58 @@ import {
   Calendar,
   Zap,
   AlertCircle,
+  ChevronDown,
+  Filter,
+  Check,
 } from 'lucide-react'
+import { Menu, Transition } from '@headlessui/react'
 
 export default function MyRequests() {
   const [requests, setRequests] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [filters, setFilters] = useState({
+    status: 'all', // all, pending, approved, denied
+    classification: 'all', // all, CRITICAL, HIGH, MEDIUM, LOW
+    sortBy: 'newest', // newest, oldest, classification
+  })
 
   useEffect(() => {
-    api.getRequests()
-      .then((data) => {
-        setRequests(data.requests)
-        setLoading(false)
-      })
-      .catch(console.error)
+    loadRequests()
   }, [])
+
+  const loadRequests = async () => {
+    try {
+      setLoading(true)
+      const data = await api.getRequests()
+      setRequests(data.requests || [])
+    } catch (error) {
+      console.error('Failed to load requests:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Filter and sort requests
+  const filteredRequests = requests
+    .filter(req => {
+      if (filters.status !== 'all' && req.status !== filters.status) return false
+      if (filters.classification !== 'all' && req.secret?.classification !== filters.classification) return false
+      return true
+    })
+    .sort((a, b) => {
+      switch (filters.sortBy) {
+        case 'newest':
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        case 'oldest':
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        case 'classification':
+          const order = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 }
+          return (order[a.secret?.classification as keyof typeof order] || 4) -
+                 (order[b.secret?.classification as keyof typeof order] || 4)
+        default:
+          return 0
+      }
+    })
 
   const getStatusInfo = (status: string) => {
     switch (status) {
@@ -63,6 +101,106 @@ export default function MyRequests() {
     }
   }
 
+  // Dropdown option types
+  type FilterOption = { value: string; label: string; color?: string; icon?: any }
+
+  const statusOptions: FilterOption[] = [
+    { value: 'all', label: 'All Statuses', icon: FileText },
+    { value: 'pending', label: 'Pending', icon: Clock, color: 'text-yellow-600' },
+    { value: 'approved', label: 'Approved', icon: CheckCircle, color: 'text-green-600' },
+    { value: 'denied', label: 'Denied', icon: XCircle, color: 'text-red-600' },
+  ]
+
+  const classificationOptions: FilterOption[] = [
+    { value: 'all', label: 'All Classifications' },
+    { value: 'CRITICAL', label: 'Critical', color: 'text-red-700 bg-red-50' },
+    { value: 'HIGH', label: 'High', color: 'text-orange-700 bg-orange-50' },
+    { value: 'MEDIUM', label: 'Medium', color: 'text-yellow-700 bg-yellow-50' },
+    { value: 'LOW', label: 'Low', color: 'text-green-700 bg-green-50' },
+  ]
+
+  const sortOptions: FilterOption[] = [
+    { value: 'newest', label: 'Newest First' },
+    { value: 'oldest', label: 'Oldest First' },
+    { value: 'classification', label: 'By Classification' },
+  ]
+
+  // Reusable Dropdown component
+  const FilterDropdown = ({
+    options,
+    value,
+    onChange,
+    label,
+    width = 'w-48'
+  }: {
+    options: FilterOption[]
+    value: string
+    onChange: (val: string) => void
+    label: string
+    width?: string
+  }) => {
+    const selectedOption = options.find(opt => opt.value === value)
+    const IconComponent = selectedOption?.icon
+
+    return (
+      <div className="flex items-center gap-2">
+        <label className="text-sm font-medium text-surface-600">{label}:</label>
+        <Menu as="div" className={`relative ${width}`}>
+          <Menu.Button className="w-full flex items-center justify-between gap-2 px-4 py-2.5 bg-white border border-surface-200 rounded-xl text-sm font-medium text-surface-700 hover:bg-surface-50 hover:border-surface-300 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all shadow-sm">
+            <span className="flex items-center gap-2">
+              {IconComponent && <IconComponent className={`w-4 h-4 ${selectedOption?.color || 'text-surface-500'}`} />}
+              <span className={selectedOption?.color || ''}>{selectedOption?.label}</span>
+            </span>
+            <ChevronDown className="w-4 h-4 text-surface-400 transition-transform" />
+          </Menu.Button>
+
+          <Transition
+            as={Fragment}
+            enter="transition ease-out duration-100"
+            enterFrom="transform opacity-0 scale-95"
+            enterTo="transform opacity-100 scale-100"
+            leave="transition ease-in duration-75"
+            leaveFrom="transform opacity-100 scale-100"
+            leaveTo="transform opacity-0 scale-95"
+          >
+            <Menu.Items className="absolute z-50 mt-2 w-full bg-white rounded-xl shadow-lg border border-surface-100 focus:outline-none overflow-hidden">
+              <div className="p-1">
+                {options.map((option) => {
+                  const OptionIcon = option.icon
+                  return (
+                    <Menu.Item key={option.value}>
+                      {({ active }) => (
+                        <button
+                          onClick={() => onChange(option.value)}
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                            active ? 'bg-brand-50' : ''
+                          } ${
+                            value === option.value ? 'bg-brand-100 text-brand-900' : 'text-surface-700'
+                          }`}
+                        >
+                          {OptionIcon && (
+                            <OptionIcon className={`w-4 h-4 ${option.color || 'text-surface-500'}`} />
+                          )}
+                          {!OptionIcon && option.color && (
+                            <span className={`w-4 h-4 rounded ${option.color.split(' ')[1]}`} />
+                          )}
+                          <span className="flex-1 text-left">{option.label}</span>
+                          {value === option.value && (
+                            <Check className="w-4 h-4 text-brand-600" />
+                          )}
+                        </button>
+                      )}
+                    </Menu.Item>
+                  )
+                })}
+              </div>
+            </Menu.Items>
+          </Transition>
+        </Menu>
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -84,7 +222,52 @@ export default function MyRequests() {
         </div>
         <div className="flex items-center gap-2 text-sm text-surface-500">
           <FileText className="w-4 h-4" />
-          <span>{requests.length} requests</span>
+          <span>{filteredRequests.length} of {requests.length} requests</span>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white rounded-xl shadow-soft p-5 border border-surface-100">
+        <div className="flex items-center gap-2 mb-4">
+          <Filter className="w-4 h-4 text-surface-500" />
+          <h2 className="text-sm font-semibold text-surface-700">Filters</h2>
+        </div>
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Status Filter */}
+          <FilterDropdown
+            label="Status"
+            options={statusOptions}
+            value={filters.status}
+            onChange={(val) => setFilters({ ...filters, status: val })}
+            width="w-44"
+          />
+
+          {/* Classification Filter */}
+          <FilterDropdown
+            label="Classification"
+            options={classificationOptions}
+            value={filters.classification}
+            onChange={(val) => setFilters({ ...filters, classification: val })}
+            width="w-48"
+          />
+
+          {/* Sort Filter */}
+          <FilterDropdown
+            label="Sort"
+            options={sortOptions}
+            value={filters.sortBy}
+            onChange={(val) => setFilters({ ...filters, sortBy: val })}
+            width="w-44"
+          />
+
+          {/* Clear Filters */}
+          <button
+            onClick={() => setFilters({ status: 'all', classification: 'all', sortBy: 'newest' })}
+            className="ml-auto flex items-center gap-1.5 px-4 py-2.5 text-sm text-surface-600 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all font-medium"
+          >
+            <XCircle className="w-4 h-4" />
+            Clear all
+          </button>
         </div>
       </div>
 

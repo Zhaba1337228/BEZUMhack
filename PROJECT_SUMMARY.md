@@ -1,207 +1,295 @@
-# SecretFlow - Project Summary
+# SecretFlow — Project Summary
 
-## What Was Built
-
-A complete, runnable enterprise-style vulnerable web application for cybersecurity training exercises.
-
-## Deliverables
-
-### 1. Backend (Go + Gin + PostgreSQL)
-- **8 database tables** with complete schema
-- **7 handler modules** covering all API endpoints
-- **4 service modules** for business logic
-- **JWT authentication** with role-based access control
-- **Complete seed data** with 5 users and 6 secrets
-
-### 2. Frontend (React + TypeScript + TailwindCSS)
-- **7 pages**: Login, Dashboard, Secrets, Secret Detail, Requests, Approvals, Audit Logs, Integrations
-- **Role-aware UI** that adapts to user permissions
-- **Complete authentication flow**
-- **Corporate enterprise design**
-
-### 3. Infrastructure
-- **Docker Compose** configuration
-- **Backend and Frontend Dockerfiles**
-- **Database migrations**
-- **Environment configuration**
-
-### 4. Documentation
-- README.md - Main documentation
-- API_SPEC.md - Complete API reference
-- ATTACK_SCENARIOS.md - Detailed attack paths
-- SETUP_GUIDE.md - Installation instructions
-
-## Architecture Overview
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                        SecretFlow                             │
-├──────────────────────────────────────────────────────────────┤
-│                                                               │
-│  Frontend (React/TypeScript)     Backend (Go/Gin)             │
-│  ┌─────────────────────┐        ┌─────────────────────┐      │
-│  │ Login               │        │ Auth Handler        │      │
-│  │ Dashboard           │        │ Secrets Handler     │      │
-│  │ Secrets             │◄──────►│ Requests Handler    │      │
-│  │ Requests            │        │ Audit Handler       │      │
-│  │ Approvals           │        │ Integrations Handler│      │
-│  │ Audit Logs          │        │ Internal Handler    │      │
-│  │ Integrations        │        │                     │      │
-│  └─────────────────────┘        └─────────────────────┘      │
-│                                  │                            │
-│                                  ▼                            │
-│                          ┌─────────────────────┐              │
-│                          │   PostgreSQL DB     │              │
-│                          │   (8 tables)        │              │
-│                          └─────────────────────┘              │
-└──────────────────────────────────────────────────────────────┘
-```
-
-## Vulnerability Summary
-
-| # | Vulnerability | Location | Attack Path |
-|---|---------------|----------|-------------|
-| 1 | Debug endpoint leaks tokens | GET /api/internal/debug/config | Path 1 |
-| 2 | Tokens stored in plaintext | integration_tokens table | Path 1, 2 |
-| 3 | Token scope not enforced | webhook_service.go | All paths |
-| 4 | Source field not verified | POST /api/internal/secrets/grant | Path 3 |
-| 5 | Audit logs leak sensitive data | audit_logs.details | Path 2 |
-| 6 | Classification bypass | approval_service.go | All paths |
-| 7 | Missing auth on internal endpoint | POST /api/internal/apply | Path 3 |
-
-## Attack Paths
-
-### Path 1: Debug-Driven (Config Leak)
-```
-Login → Discover /api/internal/debug/config → Extract token →
-Call webhook → Get CRITICAL secret
-```
-
-### Path 2: Audit-Driven (Log Replay)
-```
-Access audit logs → Find token usage events → Extract token pattern →
-Replay webhook request → Get CRITICAL secret
-```
-
-### Path 3: Internal API Misuse
-```
-Discover /api/internal/secrets/grant → Learn source validation →
-Spoof trusted source → Get auto-approved grant → Get CRITICAL secret
-```
-
-## Database Schema (8 Tables)
-
-1. **users** - User accounts (5 seed users)
-2. **secrets** - Secret metadata (6 secrets including 2 CRITICAL)
-3. **access_requests** - Access request tracking
-4. **access_grants** - Active access permissions
-5. **integrations** - External integration config (2 integrations)
-6. **integration_tokens** - Authentication tokens (2 tokens)
-7. **audit_logs** - Audit trail
-8. **debug_config** - Debug configuration (5 entries)
-
-## User Roles
-
-| Role | Capabilities |
-|------|-------------|
-| developer | View secrets, request access |
-| team_lead | + Approve LOW/MEDIUM/HIGH requests |
-| security_admin | + Approve CRITICAL, view audit, manage integrations |
-| service_account | Automated access via tokens |
-
-## Default Credentials
-
-Only the intentionally compromised developer account uses a known weak password: `dev.alice / password123`
-
-- `dev.alice` - developer, intentionally weak
-- `dev.bob` - developer, strong random password not disclosed
-- `lead.carol` - team_lead, strong random password not disclosed
-- `security.dave` - security_admin, strong random password not disclosed
-- `svc.gitlab` - service_account, strong random password not disclosed
-
-## Critical Event
-
-**Goal:** Obtain the value of `PROD_DB_MASTER_PASSWORD`
-
-**Success Response:**
-```json
-{
-  "access_granted": true,
-  "secret_value": "flag{prod_db_master_3f8a6d1c9e247b50}"
-}
-```
-
-## Why Medium-Hard Complexity
-
-1. **Multiple recon steps** - Must discover internal endpoints
-2. **Token acquisition required** - Cannot win without valid token
-3. **Dead ends exist** - Normal flow correctly enforced
-4. **System understanding needed** - Must connect multiple concepts
-5. **No single exploit** - Requires chaining discoveries
-
-## Files Created
-
-```
-secretflow/
-├── README.md
-├── .env.example
-├── docker-compose.yml
-├── docs/
-│   ├── API_SPEC.md
-│   ├── ATTACK_SCENARIOS.md
-│   └── SETUP_GUIDE.md
-├── backend/
-│   ├── Dockerfile
-│   ├── go.mod
-│   ├── go.sum
-│   ├── cmd/server/main.go
-│   ├── internal/
-│   │   ├── config/config.go
-│   │   ├── database/database.go
-│   │   ├── handlers/*.go (7 files)
-│   │   ├── middleware/*.go (2 files)
-│   │   ├── models/*.go (7 files)
-│   │   └── service/*.go (5 files)
-│   ├── migrations/001_initial_schema.sql
-│   └── pkg/jwt/jwt.go
-└── frontend/
-    ├── Dockerfile
-    ├── index.html
-    ├── nginx.conf
-    ├── package.json
-    ├── *.config.js/ts (5 config files)
-    └── src/
-        ├── App.tsx
-        ├── main.tsx
-        ├── index.css
-        ├── components/Layout/*.tsx (4 files)
-        ├── context/AuthContext.tsx
-        ├── pages/*/ (7 pages, 10 files)
-        └── services/api.ts
-```
-
-## Running the Project
-
-```bash
-# Start all services
-docker-compose up -d
-
-# Access application
-# Frontend: http://localhost:3000
-# Backend: http://localhost:8080
-
-# Login with: dev.alice / password123
-```
-
-## Security Warning
-
-This application contains **intentional security vulnerabilities**. Do not deploy to production or use with real secrets.
+## Версия: 2.0 (Security Hardened)
 
 ---
 
-**Total Implementation:** ~30 hours of development
-**Complexity:** Medium-Hard
-**Tables:** 8
-**API Endpoints:** 20+
-**Frontend Pages:** 7
-**Attack Paths:** 3
+## Что было сделано
+
+Полная переработка приложения SecretFlow с целями:
+1. Повышение надежности сессий/авторизации
+2. Закрытие уязвимости старого Path 2
+3. Проектирование и реализация нового HARD Path 2
+4. Добавление реальных фич и улучшение UX
+5. Сохранение полной работоспособности end-to-end
+
+---
+
+## Изменения в версии 2.0
+
+### A. Сессии/Безопасность (✅ Выполнено)
+
+**Middleware Hardening:**
+- Введен `StrictAuth` middleware для маркировки критичных endpoints
+- Добавлен единый формат ошибок API (`APIError` struct)
+- Единый middleware policy для всех защищенных endpoints
+- Немедленный отказ (401/403) при невалидной сессии
+- **Гарантия:** Никаких insert/update/delete/audit до успешной аутентификации
+
+**Файлы:**
+- `backend/internal/middleware/auth.go` — полный редизайн
+
+**Новые middleware функции:**
+- `Auth(secret)` — базовая JWT валидация
+- `StrictAuth(secret)` — alias с семантической маркировкой
+- `RequireRole(role)` — проверка конкретной роли
+- `RequireAnyRole(roles...)` — проверка любой из ролей
+- `ErrorHandler()` — стандартизация ошибок
+
+### B. Закрыт старый Path 2 (✅ Выполнено)
+
+**Что исправлено:**
+- `/api/audit/logs` теперь требует `security_admin`
+- `/api/audit/stats` теперь требует `security_admin`
+- Токены больше не логируются в audit events (masked preview)
+- `/api/internal/integrations/status` не возвращает `auth_token`
+- `/api/internal/integrations/test/:id` требует `security_admin`
+
+**Файлы:**
+- `backend/internal/handlers/audit.go`
+- `backend/internal/handlers/internal.go`
+- `backend/internal/service/audit_service.go`
+
+### C. Новый Path 2 HARD (✅ Выполнено)
+
+**Название:** "Confused Deputy + Trust Boundary Confusion"
+
+**Концепция:**
+Service account'ы могут делегировать доступ к секретам через новый endpoint. Уязвимость в том, что проверка scope происходит только для создателя токена, но не для целевого пользователя.
+
+**Цепочка атаки (5 шагов):**
+1. Разведка через `/api/delegate/info`
+2. Получение integration token (из Path 1 или seed)
+3. Обмен на service account JWT через `/api/service-account/exchange`
+4. Делегирование доступа СЕБЕ через `/api/delegate/access`
+5. Получение CRITICAL-секрета через обычный `/api/secrets/:id/value`
+
+**Архитектурная ошибка:**
+```
+Trust Boundary Confusion:
+- JWT валиден ✅
+- Role = service_account ✅
+- НО НЕТ ПРОВЕРКИ:
+  - allowed_secrets токена
+  - allowed_environments
+  - classification секрета
+```
+
+**Файлы:**
+- `backend/internal/service/delegate_service.go` (новый)
+- `backend/internal/handlers/delegate.go` (новый)
+- `backend/internal/handlers/router.go` (обновлен)
+- `frontend/src/services/api.ts` (добавлены методы)
+
+**Dead Ends:**
+1. Прямой вызов `/api/delegate/access` без service account JWT → 403
+2. Невалидный integration token → 401
+3. Попытка получить токен из audit логов → больше не работает
+
+### D. Новые фичи сервиса (✅ Выполнено)
+
+**Realtime-уведомления:**
+- Server-Sent Events через `/api/events/stream`
+- Индикатор подключения в UI (зеленый/янтарный)
+- Автоматический reconnect при обрыве
+- Push-уведомления о новых грантах и событиях
+
+**История/Фильтры:**
+- Фильтр по статусу (all/pending/approved/denied)
+- Фильтр по классификации (all/CRITICAL/HIGH/MEDIUM/LOW)
+- Сортировка (newest/oldest/classification)
+- Показано "X of Y requests" для прозрачности
+
+**Улучшения UX:**
+- Понятные состояния loading/error/empty
+- Визуальные индикаторы для типов уведомлений
+- Улучшенная навигация
+- Feedback для действий пользователя
+
+**Файлы:**
+- `backend/internal/handlers/dashboard.go` (SSE endpoint)
+- `frontend/src/components/Layout/Notifications.tsx` (SSE integration)
+- `frontend/src/pages/Requests/MyRequests.tsx` (фильтры)
+
+### E. Качество и стабильность (✅ Проверено)
+
+**Сборка:**
+- Backend: `go build ./...` — успешно
+- Frontend: `npm run build` — успешно
+
+**Тесты:**
+- Path 1: Работает (integration token → webhook → secret)
+- Старый Path 2: Не работает (audit logs защищены)
+- Новый Path 2: Работает (delegation flow)
+
+**Сохранено:**
+- Базовый secret flow (request → approve → access)
+- Role-based access control
+- Classification-based approval
+- Audit logging (без чувствительных данных)
+
+---
+
+## Измененные файлы
+
+### Backend
+| Файл | Изменения |
+|------|-----------|
+| `internal/middleware/auth.go` | Полный редизайн, новые middleware |
+| `internal/handlers/audit.go` | Добавлен RequireRole("security_admin") |
+| `internal/handlers/internal.go` | Удалена утечка токенов, добавлен RequireRole |
+| `internal/handlers/dashboard.go` | Добавлен SSE endpoint |
+| `internal/handlers/delegate.go` | **Новый** — delegation endpoints |
+| `internal/handlers/router.go` | Регистрация delegate handler |
+| `internal/service/audit_service.go` | Удалено логирование токенов |
+| `internal/service/delegate_service.go` | **Новый** — delegation logic с уязвимостью |
+
+### Frontend
+| Файл | Изменения |
+|------|-----------|
+| `src/services/api.ts` | Добавлены delegation методы |
+| `src/components/Layout/Notifications.tsx` | SSE integration, индикатор подключения |
+| `src/pages/Requests/MyRequests.tsx` | Фильтры и сортировка |
+
+### Документация
+| Файл | Изменения |
+|------|-----------|
+| `docs/ATTACK_SCENARIOS.md` | Полный редизайн, новый Path 2 HARD |
+| `README.md` | Обновлен для v2.0 |
+| `PROJECT_SUMMARY.md` | Этот файл |
+
+---
+
+## Как воспроизвести новый HARD Path 2
+
+### Предварительные требования
+1. Запущенное приложение (Docker или локально)
+2. Учетные данные `dev.alice` / `password123`
+3. Интеграционный токен (из seed: `gf_prod_abc123xyz789`)
+
+### Шаги
+
+```bash
+# 1. Войти и получить JWT
+curl -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"dev.alice","password":"password123"}'
+
+# 2. Разведка - понять delegation flow
+curl http://localhost:8080/api/delegate/info \
+  -H "Authorization: Bearer <user-jwt>"
+
+# 3. Обменять интеграционный токен на service account JWT
+curl -X POST http://localhost:8080/api/service-account/exchange \
+  -H "Content-Type: application/json" \
+  -d '{"integration_token":"gf_prod_abc123xyz789","purpose":"debugging"}'
+
+# 4. Получить свой user ID
+curl http://localhost:8080/api/auth/me \
+  -H "Authorization: Bearer <user-jwt>"
+
+# 5. Найти ID CRITICAL-секрета
+curl http://localhost:8080/api/secrets \
+  -H "Authorization: Bearer <user-jwt>"
+
+# 6. Создать грант СЕБЕ через delegation
+curl -X POST http://localhost:8080/api/delegate/access \
+  -H "Authorization: Bearer <service-account-jwt>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "secret_id": "<prod-db-master-password-uuid>",
+    "target_user_id": "<your-user-id>",
+    "justification": "Debugging",
+    "duration_hours": 24
+  }'
+
+# 7. Получить значение секрета
+curl http://localhost:8080/api/secrets/<secret-id>/value \
+  -H "Authorization: Bearer <user-jwt>"
+```
+
+**Ожидаемый результат:**
+```json
+{
+  "secret": {
+    "id": "...",
+    "name": "PROD_DB_MASTER_PASSWORD",
+    "value": "flag{...}"
+  }
+}
+```
+
+---
+
+## Ограничения и риски
+
+### Известные ограничения
+1. **SSE — in-memory:** Notification channels хранятся в памяти, не работают при restart. В production нужен Redis pub/sub.
+2. **Token hashing:** Интеграционные токены все еще хранятся в plaintext (преднамеренно для CTF).
+3. **Нет rate limiting:** Endpoint'ы не защищены от brute force (преднамеренно для CTF).
+
+### Риски
+1. **Path 1 все еще работает:** Integration token leakage через webhook flow — это фича для CTF.
+2. **Delegation уязвимость:** Преднамеренная уязвимость для HARD Path 2.
+3. **Упрощенная аутентификация:** JWT без refresh token, blacklist и т.д.
+
+### Не реализовано (out of scope)
+- 2FA/MFA
+- Password policies
+- Account lockout
+- CSRF protection
+- Rate limiting
+- Token rotation
+
+---
+
+## Метрики
+
+| Метрика | Значение |
+|---------|----------|
+| Backend файлов изменено | 8 |
+| Frontend файлов изменено | 3 |
+| Новых endpoint'ов | 4 |
+| Закрыто уязвимостей | 3 |
+| Добавлено уязвимостей (CTF) | 1 (HARD) |
+| Строк кода добавлено | ~500 |
+| Строк кода удалено | ~50 |
+
+---
+
+## Рекомендации для будущих улучшений
+
+1. **Production hardening:**
+   - Hash integration tokens (bcrypt/argon2)
+   - Add refresh tokens + blacklist
+   - Implement rate limiting
+   - Add request signing for webhooks
+
+2. **Delegation fix:**
+   - Проверять `token.AllowedSecrets` в `DelegateService.DelegateAccess()`
+   - Проверять `token.AllowedEnvironments`
+   - Логировать delegation события
+
+3. **Monitoring:**
+   - Add metrics (Prometheus)
+   - Add distributed tracing (Jaeger)
+   - Add structured logging (zerolog)
+
+4. **Testing:**
+   - Unit tests для service layer
+   - Integration tests для API
+   - E2E tests для attack paths
+
+---
+
+## Заключение
+
+SecretFlow v2.0 — полностью рабочий сервис с:
+- ✅ Усиленной безопасностью сессий
+- ✅ Закрытым старым Path 2
+- ✅ Новым HARD Path 2 (Confused Deputy)
+- ✅ Realtime-уведомлениями
+- ✅ Улучшенным UX
+- ✅ Полной end-to-end работоспособностью
+
+Приложение готово для использования в CTF-упражнениях и тренингах по безопасности.

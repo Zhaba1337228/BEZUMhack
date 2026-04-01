@@ -62,6 +62,7 @@ func SetupRouter(db *gorm.DB, cfg RouterConfig) *gin.Engine {
 	SetupIntegrationsHandler(r, db, cfg.JWTSecret)
 	SetupInternalHandler(r, db, cfg.JWTSecret)
 	SetupDashboardHandler(r, db, cfg.JWTSecret)
+	SetupDelegateHandler(r, db, cfg.JWTSecret) // NEW: Delegation endpoints (HARD Path 2)
 
 	// Health check
 	r.GET("/health", func(c *gin.Context) {

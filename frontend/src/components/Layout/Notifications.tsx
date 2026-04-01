@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect, useRef } from 'react'
 import { Bell, Check, ChevronRight, AlertCircle, Info, Shield, Key } from 'lucide-react'
 import { api } from '../../services/api'
+import { useAuth } from '../../context/AuthContext'
 
 export interface Notification {
   id: string
@@ -15,9 +16,83 @@ export interface Notification {
 }
 
 export default function Notifications() {
+  const { user } = useAuth()
   const [isOpen, setIsOpen] = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(false)
+  const [connected, setConnected] = useState(false)
+  const eventSourceRef = useRef<EventSource | null>(null)
+
+  // Setup SSE connection for real-time notifications
+  useEffect(() => {
+    connectToEventStream()
+    return () => disconnectFromEventStream()
+  }, [])
+
+  const connectToEventStream = () => {
+    const token = localStorage.getItem('token')
+    if (!token || !user) return
+
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+    const streamUrl = `${API_URL}/api/events/stream?token=${encodeURIComponent(token)}`
+    const eventSource = new EventSource(streamUrl)
+
+    eventSource.onopen = () => {
+      setConnected(true)
+      console.log('Connected to notification stream')
+    }
+
+    eventSource.onerror = (error) => {
+      setConnected(false)
+      console.error('Notification stream error:', error)
+      // Reconnect after 5 seconds
+      setTimeout(() => {
+        if (eventSource.readyState === EventSource.CLOSED) {
+          connectToEventStream()
+        }
+      }, 5000)
+    }
+
+    eventSource.addEventListener('notification', (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        addNotification({
+          id: data.id || `evt-${Date.now()}`,
+          type: mapEventType(data.type),
+          title: data.title || 'Notification',
+          message: data.message || '',
+          timestamp: new Date().toLocaleString(),
+          read: false,
+        })
+      } catch (e) {
+        console.error('Failed to parse notification:', e)
+      }
+    })
+
+    eventSourceRef.current = eventSource
+  }
+
+  const disconnectFromEventStream = () => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
+    }
+    setConnected(false)
+  }
+
+  const mapEventType = (type: string): Notification['type'] => {
+    switch (type) {
+      case 'grant': return 'grant'
+      case 'alert': return 'alert'
+      case 'approval': return 'approval'
+      case 'request': return 'request'
+      default: return 'info'
+    }
+  }
+
+  const addNotification = (notification: Notification) => {
+    setNotifications(prev => [notification, ...prev].slice(0, 10))
+  }
 
   // Load notifications on mount and every 30 seconds
   useEffect(() => {
@@ -29,8 +104,8 @@ export default function Notifications() {
   const loadNotifications = async () => {
     try {
       setLoading(true)
-      // Get pending requests for current user
-      const requestsData = await api.getRequests({ pending: 'true' })
+      // Get recent requests for current user
+      const requestsData = await api.getRequests()
 
       // Get audit logs for recent activity
       let auditLogs: any[] = []
@@ -43,13 +118,25 @@ export default function Notifications() {
 
       const newNotifications: Notification[] = []
 
-      // Add pending requests as notifications
-      requestsData.requests?.forEach((req: any) => {
+      // Add recent requests as notifications (pending/approved/denied)
+      requestsData.requests?.slice(0, 5).forEach((req: any) => {
+        const status = req.status || 'pending'
+        const type: Notification['type'] = status === 'approved'
+          ? 'grant'
+          : status === 'denied'
+            ? 'alert'
+            : 'request'
+        const statusMessage = status === 'approved'
+          ? 'Request approved'
+          : status === 'denied'
+            ? 'Request denied'
+            : 'Pending approval'
+
         newNotifications.push({
           id: `req-${req.id}`,
-          type: 'request',
+          type,
           title: req.secret?.name || 'Access Request',
-          message: `Pending approval for ${req.justification}`,
+          message: `${statusMessage}: ${req.justification}`,
           timestamp: new Date(req.created_at).toLocaleString(),
           read: false,
           actionUrl: '/requests',
@@ -134,6 +221,10 @@ export default function Notifications() {
         aria-label="Notifications"
       >
         <Bell className="w-5 h-5" />
+        {/* Connection status indicator */}
+        <span className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white ${
+          connected ? 'bg-green-500' : 'bg-amber-500'
+        }`} title={connected ? 'Live updates enabled' : 'Reconnecting...'} />
         {unreadCount > 0 && (
           <>
             <span className="absolute top-1 right-1 min-w-5 h-5 px-1 flex items-center justify-center bg-red-500 text-white text-xs font-bold rounded-full border-2 border-white shadow-sm">
@@ -246,10 +337,10 @@ export default function Notifications() {
             {notifications.length > 0 && (
               <div className="px-4 py-2 border-t border-surface-100 bg-surface-50">
                 <button
-                  onClick={() => window.location.href = '/audit'}
+                  onClick={() => window.location.href = '/requests'}
                   className="w-full text-center text-xs text-surface-500 hover:text-surface-700 font-medium"
                 >
-                  View all activity →
+                  View all activity {'->'}
                 </button>
               </div>
             )}
@@ -259,3 +350,4 @@ export default function Notifications() {
     </div>
   )
 }
+

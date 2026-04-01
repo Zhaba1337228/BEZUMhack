@@ -7,6 +7,14 @@ import (
 	"gorm.io/gorm"
 )
 
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 type AuditService struct {
 	db *gorm.DB
 }
@@ -45,44 +53,39 @@ func (s *AuditService) Log(action AuditAction, userID *string, resourceType stri
 	return models.CreateAuditLog(s.db, log)
 }
 
-// LogIntegrationTokenUsed logs token usage with detailed operational info
-// VULNERABILITY: Logs full token and request structure for "operational debugging"
+// LogIntegrationTokenUsed logs token usage
+// SECURITY FIX: No longer logs full token value - only token ID and masked prefix
 func (s *AuditService) LogIntegrationTokenUsed(token *models.IntegrationToken, requestBody map[string]interface{}, ip string) error {
-	// Build detailed operational log for troubleshooting integration issues
-	// This is intentionally verbose to help ops debug production issues
+	// Log only non-sensitive operational data
+	// Token value is NEVER logged to prevent replay attacks
 	details := map[string]interface{}{
 		"token_id":         token.ID,
-		"token_value":      token.Token, // VULNERABILITY: Full token logged for debugging
-		"token_prefix":     token.Token[:8],
+		"token_prefix":     token.Token[:min(8, len(token.Token))] + "...", // Masked
 		"integration_id":   token.IntegrationID,
 		"integration_name": token.Integration.Name,
 		"provider":         token.Integration.Provider,
 		"project":          token.Integration.ProjectName,
-		"request_body":     requestBody, // Includes full request structure for replay
+		"request_type":     "webhook",
 		"source_ip":        ip,
 		"timestamp":        token.CreatedAt.Format("2006-01-02T15:04:05Z"),
-		"diagnostic": map[string]interface{}{
-			"allowed_secrets":      token.AllowedSecrets,
-			"allowed_environments": token.AllowedEnvironments,
-			"trust_level":          "auto_approved",
-			"approval_bypassed":    true,
-		},
+		// SECURITY: token_value, request_body removed to prevent replay
 	}
 
 	return s.Log(ActionIntegrationTokenUsed, nil, "integration_token", &token.ID, details, ip)
 }
 
-// LogWebhookSuccess logs successful webhook processing with natural hints
+// LogWebhookSuccess logs successful webhook processing
+// SECURITY FIX: No longer logs token value
 func (s *AuditService) LogWebhookSuccess(token *models.IntegrationToken, secretID string, userID string) error {
 	details := map[string]interface{}{
-		"message":          "Automated access granted via GitLab pipeline",
+		"message":          "Automated access granted via trusted integration",
 		"integration":      token.Integration.Name,
 		"project":          token.Integration.ProjectName,
 		"secret_id":        secretID,
 		"user_id":          userID,
 		"approval_status":  "auto_approved",
-		"reason":           "Trusted automation - GitLab CI/CD pipeline",
-		"token_used":       token.Token, // VULNERABILITY: Token in success log
+		"reason":           "Trusted automation - integration token validated",
+		"token_id":         token.ID, // Only log ID, not value
 	}
 
 	return s.Log(ActionGrantCreated, nil, "access_grant", nil, details, "10.0.0.50")
