@@ -120,13 +120,13 @@ CREATE INDEX idx_secrets_environment ON secrets(environment);
 
 -- Users
 -- dev.alice: password123 (weak leaked password)
--- Other accounts use undisclosed high-entropy passwords to prevent brute-force shortcuts.
+-- Other accounts use strong random passwords generated for local organizer testing.
 INSERT INTO users (username, email, password_hash, role, team) VALUES
 ('dev.alice', 'alice@company.com', '$2a$10$K0BH/NSZpSS25QH57gc/4.isvL12g/MinXpJyThN2NvFvEtTgMmMi', 'developer', 'platform'),
-('dev.bob', 'bob@company.com', '$2a$10$8OkVUGh5s.S9l86KQcjuSeIDYn9wWelgJLC0Txr9ZlZXBVrHOVzyq', 'developer', 'backend'),
-('lead.carol', 'carol@company.com', '$2a$10$VnGIJzx6qA1mi3lgk96JO.qeORs/yiKPRtUxZI5nqsz/Z8QG/btCq', 'team_lead', 'platform'),
-('security.dave', 'dave@company.com', '$2a$10$uPA.hgJx/uXGdf0Hp.7GTeMOLNde1B4eiWR5lzuR4iOYI0Ko7rsUi', 'security_admin', 'security'),
-('svc.gitlab', 'gitlab-ci@system.local', '$2a$10$o7CC/UwL/527hWib8QgGrOnnv9MlvO863pFWwj6781KVxZZIXyFSe', 'service_account', 'automation');
+('dev.bob', 'bob@company.com', '$2a$10$ouGoB.H2T44A25irjhJHTeeCrQ2bJavqK2WCjtUvmuZke4zTxyOHu', 'developer', 'backend'),
+('lead.carol', 'carol@company.com', '$2a$10$dfhal59orEh37UywQA0g4.vIIRKI8nVBVrzmyz72lEiyGSu2bDPOq', 'team_lead', 'platform'),
+('security.dave', 'dave@company.com', '$2a$10$S0vdxlZ9zpA3nIwGVysBdOPiS/rn.YRS.jRgQTXEgnyAdquhSa.Bu', 'security_admin', 'security'),
+('svc.gitlab', 'gitlab-ci@system.local', '$2a$10$TJ3NywXqR2obYmJLzMPYjOL3pPJ/TXzOf9jEowFaweKGj/VYRp4um', 'service_account', 'automation');
 
 -- Secrets
 INSERT INTO secrets (name, description, classification, environment, owner_team, value) VALUES
