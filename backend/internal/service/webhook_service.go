@@ -10,9 +10,8 @@ import (
 )
 
 var (
-	ErrInvalidToken      = errors.New("invalid integration token")
+	ErrInvalidToken       = errors.New("invalid integration token")
 	ErrIntegrationDisabled = errors.New("integration is disabled")
-	ErrTokenExpired      = errors.New("token has expired")
 )
 
 type WebhookService struct {
@@ -37,7 +36,7 @@ type WebhookResponse struct {
 }
 
 // ValidateToken validates an integration token
-// VULNERABILITY: Does not check allowed_secrets or allowed_environments
+// PATH 1 & 2 VULNERABILITY: Does not check allowed_secrets or allowed_environments
 func (s *WebhookService) ValidateToken(token string) (*models.IntegrationToken, error) {
 	intToken, err := models.GetIntegrationByToken(s.db, token)
 	if err != nil {
@@ -50,12 +49,6 @@ func (s *WebhookService) ValidateToken(token string) (*models.IntegrationToken, 
 
 	// VULNERABILITY: These fields exist but are never checked
 	// In a real system, this would restrict which secrets/environments the token can access
-	// if intToken.AllowedSecrets != nil {
-	//     check if secretID is in allowed list
-	// }
-	// if intToken.AllowedEnvironments != nil {
-	//     check if environment is in allowed list
-	// }
 
 	// Update last used timestamp
 	_ = models.UpdateTokenLastUsed(s.db, intToken.ID)
@@ -66,8 +59,6 @@ func (s *WebhookService) ValidateToken(token string) (*models.IntegrationToken, 
 // ProcessWebhookRequest processes a webhook request with valid token
 // This is the core vulnerability: trusted automation bypasses classification-based approval
 func (s *WebhookService) ProcessWebhookRequest(token *models.IntegrationToken, req *WebhookRequest, userID string) (*WebhookResponse, error) {
-	// Create access request with auto_approved = true
-	// This bypasses the normal approval workflow entirely
 	now := time.Now()
 	accessReq := &models.AccessRequest{
 		SecretID:      req.SecretID,
@@ -76,24 +67,14 @@ func (s *WebhookService) ProcessWebhookRequest(token *models.IntegrationToken, r
 		Status:        "approved",
 		AutoApproved:  true,
 		Source:        "webhook",
-		SourceContext: &models.JSONMap{
-			"integration_id": token.IntegrationID,
-			"token_id":       token.ID,
-			"integration_name": token.Integration.Name,
-			"project":        token.Integration.ProjectName,
-			"pipeline":       "gitlab-ci",
-			"trigger":        "deployment",
-		},
-		CreatedAt:   now,
-		DecidedAt:   &now,
+		CreatedAt:     now,
+		DecidedAt:     &now,
 	}
 
 	if err := s.db.Create(accessReq).Error; err != nil {
 		return nil, err
 	}
 
-	// Create access grant immediately (bypasses normal approval)
-	// This is the critical vulnerability: CRITICAL secrets should still require approval
 	grant := &models.AccessGrant{
 		RequestID: accessReq.ID,
 		SecretID:  req.SecretID,
@@ -107,7 +88,6 @@ func (s *WebhookService) ProcessWebhookRequest(token *models.IntegrationToken, r
 		return nil, err
 	}
 
-	// Get secret value
 	var secret models.Secret
 	if err := s.db.Where("id = ?", req.SecretID).First(&secret).Error; err != nil {
 		return nil, err

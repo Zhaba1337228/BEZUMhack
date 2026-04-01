@@ -67,7 +67,7 @@ This document describes the three main attack paths to gain access to the CRITIC
    ```json
    {
      "access_granted": true,
-     "secret_value": "SUPER_SECRET_PROD_DB_PASS_2024",
+     "secret_value": "flag{prod_db_master_3f8a6d1c9e247b50}",
      "grant_expires_at": "2024-03-31T12:00:00Z"
    }
    ```
@@ -197,7 +197,7 @@ This document describes the three main attack paths to gain access to the CRITIC
      "grant": {
        "id": "uuid",
        "auto_approved": true,
-       "secret_value": "SUPER_SECRET_PROD_DB_PASS_2024",
+       "secret_value": "flag{prod_db_master_3f8a6d1c9e247b50}",
        "expires_at": "..."
      }
    }

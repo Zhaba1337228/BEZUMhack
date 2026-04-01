@@ -121,7 +121,7 @@ Get secret value (requires active grant).
   "secret": {
     "id": "uuid",
     "name": "PROD_DB_MASTER_PASSWORD",
-    "value": "SUPER_SECRET_PROD_DB_PASS_2024"
+    "value": "flag{prod_db_master_3f8a6d1c9e247b50}"
   }
 }
 ```
@@ -325,7 +325,7 @@ Webhook endpoint for trusted integrations.
 ```json
 {
   "access_granted": true,
-  "secret_value": "SUPER_SECRET_PROD_DB_PASS_2024",
+  "secret_value": "flag{prod_db_master_3f8a6d1c9e247b50}",
   "grant_expires_at": "2024-03-31T12:00:00Z",
   "request_id": "uuid"
 }

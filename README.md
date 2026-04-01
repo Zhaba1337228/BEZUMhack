@@ -50,10 +50,10 @@ docker-compose up -d
 | Username | Password | Role |
 |----------|----------|------|
 | dev.alice | password123 | developer |
-| dev.bob | password123 | developer |
-| lead.carol | password123 | team_lead |
-| security.dave | password123 | security_admin |
-| svc.gitlab | password123 | service_account |
+| dev.bob | not disclosed (strong random) | developer |
+| lead.carol | not disclosed (strong random) | team_lead |
+| security.dave | not disclosed (strong random) | security_admin |
+| svc.gitlab | not disclosed (strong random) | service_account |
 
 ---
 

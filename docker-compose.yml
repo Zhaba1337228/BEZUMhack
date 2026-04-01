@@ -5,8 +5,8 @@ services:
     image: postgres:15-alpine
     container_name: secretflow-db
     environment:
-      POSTGRES_USER: secretflow
-      POSTGRES_PASSWORD: secretflow_password
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Rrobocopid12
       POSTGRES_DB: secretflow
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -28,8 +28,8 @@ services:
       DB_HOST: db
       DB_PORT: 5432
       DB_NAME: secretflow
-      DB_USER: secretflow
-      DB_PASSWORD: secretflow_password
+      DB_USER: postgres
+      DB_PASSWORD: Rrobocopid12
       JWT_SECRET: super_secret_jwt_key_change_in_production
       JWT_EXPIRY_HOURS: 24
       BACKEND_PORT: 8080

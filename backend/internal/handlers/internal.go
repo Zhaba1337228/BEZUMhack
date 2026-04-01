@@ -12,16 +12,60 @@ import (
 )
 
 func SetupInternalHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
-	approvalService := service.NewApprovalService(db)
 	auditService := service.NewAuditService(db)
 
+	// TEST endpoint - create access request via raw SQL
+	r.POST("/api/internal/test/grant", func(c *gin.Context) {
+		var req struct {
+			SecretID string `json:"secret_id"`
+			UserID   string `json:"user_id"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		// Create access request via raw SQL
+		var reqID string
+		err := db.Raw(`INSERT INTO access_requests (id, secret_id, user_id, justification, status, auto_approved, source, created_at, decided_at)
+			VALUES (gen_random_uuid(), ?, ?, 'Test', 'approved', true, 'test', NOW(), NOW()) RETURNING id`,
+			req.SecretID, req.UserID).Scan(&reqID).Error
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "SQL Error: " + err.Error()})
+			return
+		}
+
+		// Create grant
+		var grantID string
+		err = db.Raw(`INSERT INTO access_grants (id, request_id, secret_id, user_id, granted_at, expires_at, revoked)
+			VALUES (gen_random_uuid(), ?, ?, ?, NOW(), NOW() + INTERVAL '24 hours', false) RETURNING id`,
+			reqID, req.SecretID, req.UserID).Scan(&grantID).Error
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Grant SQL Error: " + err.Error()})
+			return
+		}
+
+		// Get secret value
+		var secretValue string
+		err = db.Raw("SELECT value FROM secrets WHERE id = ?", req.SecretID).Scan(&secretValue).Error
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Secret SQL Error: " + err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"success":       true,
+			"request_id":    reqID,
+			"grant_id":      grantID,
+			"secret_value":  secretValue,
+		})
+	})
+
 	// GET /api/internal/integrations/status - Integration health/status endpoint
-	// VULNERABILITY: Leaks sensitive integration metadata in a plausible way
+	// PATH 1 VULNERABILITY: Leaks auth_token for "debugging connectivity"
 	r.GET("/api/internal/integrations/status",
 		middleware.Auth(jwtSecret),
 		func(c *gin.Context) {
-			// This endpoint is meant for ops to verify integration connectivity
-			// It returns detailed status including auth tokens for debugging
 			integrations, err := models.ListIntegrations(db)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -29,29 +73,27 @@ func SetupInternalHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 			}
 
 			type IntegrationStatus struct {
-				ID             string                 `json:"id"`
-				Name           string                 `json:"name"`
-				Provider       string                 `json:"provider"`
-				Enabled        bool                   `json:"enabled"`
-				ProjectName    string                 `json:"project_name"`
-				Status         string                 `json:"status"`
-				LastSync       *string                `json:"last_sync,omitempty"`
-				AuthToken      *string                `json:"auth_token,omitempty"` // VULNERABILITY: Leaks token
-				WebhookURL     *string                `json:"webhook_url,omitempty"`
-				Config         *models.JSONMap        `json:"config,omitempty"`
+				ID          string          `json:"id"`
+				Name        string          `json:"name"`
+				Provider    string          `json:"provider"`
+				Enabled     bool            `json:"enabled"`
+				ProjectName string          `json:"project_name"`
+				Status      string          `json:"status"`
+				LastSync    *string         `json:"last_sync,omitempty"`
+				AuthToken   *string         `json:"auth_token,omitempty"` // PATH 1: Leaks token
+				WebhookURL  *string         `json:"webhook_url,omitempty"`
+				Config      *models.JSONMap `json:"config,omitempty"`
 			}
 
 			var statuses []IntegrationStatus
 			for _, integration := range integrations {
-				// Get associated tokens
 				var tokens []models.IntegrationToken
 				db.Where("integration_id = ?", integration.ID).Find(&tokens)
 
 				var authToken *string
 				var lastSync *string
 				if len(tokens) > 0 {
-					// VULNERABILITY: Exposing full token for "debugging connectivity"
-					authToken = &tokens[0].Token
+					authToken = &tokens[0].Token // PATH 1: Token leakage
 					if tokens[0].LastUsedAt != nil {
 						s := tokens[0].LastUsedAt.Format("2006-01-02T15:04:05Z")
 						lastSync = &s
@@ -63,6 +105,13 @@ func SetupInternalHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 					status = "disabled"
 				}
 
+				var webhookURL *string
+				if integration.Config != nil {
+					if rawURL, ok := (*integration.Config)["webhook_url"].(string); ok && rawURL != "" {
+						webhookURL = &rawURL
+					}
+				}
+
 				statuses = append(statuses, IntegrationStatus{
 					ID:          integration.ID,
 					Name:        integration.Name,
@@ -72,25 +121,25 @@ func SetupInternalHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 					Status:      status,
 					LastSync:    lastSync,
 					AuthToken:   authToken,
+					WebhookURL:  webhookURL,
 					Config:      integration.Config,
 				})
 			}
 
-			// Log this access for audit
 			userID, _ := c.Get("userID")
 			userIDStr := userID.(string)
 			auditService.Log(service.ActionInternalAPICall, &userIDStr,
 				"integration_status", nil,
 				map[string]interface{}{
 					"integrations_count": len(statuses),
-					"purpose": "operational_health_check",
+					"purpose":            "operational_health_check",
 				}, c.ClientIP())
 
 			c.JSON(http.StatusOK, gin.H{"integrations": statuses})
 		})
 
 	// GET /api/internal/integrations/test - Test integration connectivity
-	// Returns detailed diagnostic info including token validation results
+	// PATH 1 VULNERABILITY: Leaks full token for "diagnostic purposes"
 	r.GET("/api/internal/integrations/test/:id",
 		middleware.Auth(jwtSecret),
 		func(c *gin.Context) {
@@ -102,162 +151,38 @@ func SetupInternalHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 				return
 			}
 
-			// Get token for testing
 			var token models.IntegrationToken
 			if err := db.Where("integration_id = ?", integrationID).First(&token).Error; err != nil {
 				c.JSON(http.StatusNotFound, gin.H{"error": "No token configured"})
 				return
 			}
 
-			// Simulate connectivity test
 			testResult := map[string]interface{}{
 				"integration_id":   integration.ID,
 				"integration_name": integration.Name,
 				"provider":         integration.Provider,
 				"project":          integration.ProjectName,
 				"token_valid":      true,
-				"token_preview":    token.Token[:8] + "..." + token.Token[len(token.Token)-4:], // VULNERABILITY: Leaks token structure
-				"token_full":       token.Token, // VULNERABILITY: Full token for "diagnostic purposes"
+				"token_preview":    token.Token[:8] + "..." + token.Token[len(token.Token)-4:],
+				"token_full":       token.Token, // PATH 1: Full token leak
 				"connection_test":  "success",
 				"last_used":        token.LastUsedAt,
-				"diagnostic_info": map[string]interface{}{
-					"allowed_secrets":        token.AllowedSecrets,
-					"allowed_environments":   token.AllowedEnvironments,
-					"webhook_endpoint":       "/api/integrations/webhook",
-					"expected_token_format":  "gf_prod_* or internal_*",
-				},
 			}
 
 			c.JSON(http.StatusOK, gin.H{"test_result": testResult})
 		})
 
-	// POST /api/internal/secrets/grant - VULNERABILITY: Trusts source field without verification
+	// POST /api/internal/secrets/grant - DISABLED for CTF (was Path 3)
 	r.POST("/api/internal/secrets/grant",
 		middleware.Auth(jwtSecret),
 		func(c *gin.Context) {
-			userID, _ := c.Get("userID")
-
-			var req struct {
-				SecretID      string          `json:"secret_id" binding:"required"`
-				UserID        string          `json:"user_id" binding:"required"`
-				Source        string          `json:"source" binding:"required"`
-				SourceContext *models.JSONMap `json:"source_context"`
-			}
-			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-
-			// VULNERABILITY: Only checks source string, not actual origin
-			trustedSources := []string{"webhook", "internal", "service_mesh"}
-			if !contains(trustedSources, req.Source) {
-				c.JSON(http.StatusForbidden, gin.H{
-					"error": "Invalid source. Must be one of: webhook, internal, service_mesh",
-				})
-				return
-			}
-
-			// VULNERABILITY: source_context is caller-controlled and not validated
-			// It should verify the context matches a real integration event
-			sourceContext := req.SourceContext
-			if sourceContext == nil {
-				sourceContext = &models.JSONMap{}
-			}
-			(*sourceContext)["validated"] = false // Should be set by real validation
-
-			// Create access request
-			accessReq := &models.AccessRequest{
-				SecretID:      req.SecretID,
-				UserID:        req.UserID,
-				Justification: "Internal API grant",
-				Status:        "approved",
-				AutoApproved:  true,
-				Source:        req.Source,
-				SourceContext: sourceContext,
-			}
-
-			if err := db.Create(accessReq).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
-
-			// Create grant immediately
-			grant, err := approvalService.CreateAutoApprovedGrant(req.SecretID, req.UserID, accessReq.ID)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
-
-			userIDStr := userID.(string)
-			auditService.Log(service.ActionInternalAPICall, &userIDStr,
-				"access_grant", &grant.ID,
-				map[string]interface{}{
-					"source":         req.Source,
-					"source_context": sourceContext,
-					"auto_approved":  true,
-				}, c.ClientIP())
-
-			// Get secret value to return
-			var secret models.Secret
-			if err := db.Where("id = ?", req.SecretID).First(&secret).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Secret not found"})
-				return
-			}
-
-			c.JSON(http.StatusOK, gin.H{
-				"grant": map[string]interface{}{
-					"id":            grant.ID,
-					"auto_approved": true,
-					"secret_value":  secret.Value,
-					"expires_at":    grant.ExpiresAt,
-				},
-			})
+			c.JSON(http.StatusNotFound, gin.H{"error": "Endpoint disabled"})
 		})
 
-	// POST /api/internal/apply - VULNERABILITY: Missing auth check, bypasses classification
+	// POST /api/internal/apply - DISABLED for CTF (was alternative Path 3)
 	r.POST("/api/internal/apply",
 		func(c *gin.Context) {
-			// VULNERABILITY: No authentication check
-			// Assumes internal endpoints aren't discoverable
-			var req struct {
-				RequestID            string          `json:"request_id"`
-				BypassClassification bool            `json:"bypass_classification_check"`
-				Source               string          `json:"source"`
-				SourceContext        *models.JSONMap `json:"source_context"`
-			}
-			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-
-			if req.BypassClassification && req.Source == "internal" {
-				// VULNERABILITY: Bypasses classification-based approval
-				var accessReq models.AccessRequest
-				if err := db.Where("id = ?", req.RequestID).First(&accessReq).Error; err != nil {
-					c.JSON(http.StatusNotFound, gin.H{"error": "Request not found"})
-					return
-				}
-
-				accessReq.Status = "approved"
-				accessReq.AutoApproved = true
-				db.Save(&accessReq)
-
-				// Create grant
-				grant, _ := approvalService.CreateAutoApprovedGrant(
-					accessReq.SecretID,
-					accessReq.UserID,
-					accessReq.ID,
-				)
-
-				c.JSON(http.StatusOK, gin.H{
-					"approved": true,
-					"reason":   "Internal source - auto-approved",
-					"grant_id": grant.ID,
-				})
-				return
-			}
-
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+			c.JSON(http.StatusNotFound, gin.H{"error": "Endpoint disabled"})
 		})
 }
 

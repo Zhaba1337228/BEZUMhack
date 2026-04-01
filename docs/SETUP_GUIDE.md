@@ -48,8 +48,8 @@ Use these credentials:
 | Username | Password | Role |
 |----------|----------|------|
 | dev.alice | password123 | developer |
-| lead.carol | password123 | team_lead |
-| security.dave | password123 | security_admin |
+| lead.carol | not disclosed (strong random) | team_lead |
+| security.dave | not disclosed (strong random) | security_admin |
 
 ---
 

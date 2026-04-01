@@ -14,7 +14,7 @@ type AccessRequest struct {
 	Status         string     `gorm:"type:request_status;not null" json:"status"`
 	AutoApproved   bool       `gorm:"not null" json:"auto_approved"`
 	Source         string     `gorm:"not null" json:"source"`
-	SourceContext  *JSONMap   `gorm:"type:jsonb" json:"source_context,omitempty"`
+	SourceContext  *string    `gorm:"type:jsonb" json:"source_context,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
 	DecidedAt      *time.Time `json:"decided_at,omitempty"`
 	DecidedBy      *string    `gorm:"type:uuid" json:"decided_by,omitempty"`

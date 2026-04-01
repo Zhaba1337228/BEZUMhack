@@ -111,13 +111,13 @@ Spoof trusted source → Get auto-approved grant → Get CRITICAL secret
 
 ## Default Credentials
 
-All users share the same password: `password123`
+Only the intentionally compromised developer account uses a known weak password: `dev.alice / password123`
 
-- `dev.alice` - developer
-- `dev.bob` - developer
-- `lead.carol` - team_lead
-- `security.dave` - security_admin
-- `svc.gitlab` - service_account
+- `dev.alice` - developer, intentionally weak
+- `dev.bob` - developer, strong random password not disclosed
+- `lead.carol` - team_lead, strong random password not disclosed
+- `security.dave` - security_admin, strong random password not disclosed
+- `svc.gitlab` - service_account, strong random password not disclosed
 
 ## Critical Event
 
@@ -127,7 +127,7 @@ All users share the same password: `password123`
 ```json
 {
   "access_granted": true,
-  "secret_value": "SUPER_SECRET_PROD_DB_PASS_2024"
+  "secret_value": "flag{prod_db_master_3f8a6d1c9e247b50}"
 }
 ```
 

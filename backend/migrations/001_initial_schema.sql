@@ -118,22 +118,24 @@ CREATE INDEX idx_secrets_environment ON secrets(environment);
 
 -- Seed Data
 
--- Users (password: "password123" - hash is placeholder, actual hash computed at runtime)
+-- Users
+-- dev.alice: password123 (weak leaked password)
+-- Other accounts use undisclosed high-entropy passwords to prevent brute-force shortcuts.
 INSERT INTO users (username, email, password_hash, role, team) VALUES
-('dev.alice', 'alice@company.com', '$2a$10$XV3LX8zJqKxN9PqJzK8L5eYqZ8vN9X2mK5L8PqJzK8L5eYqZ8vN9X', 'developer', 'platform'),
-('dev.bob', 'bob@company.com', '$2a$10$XV3LX8zJqKxN9PqJzK8L5eYqZ8vN9X2mK5L8PqJzK8L5eYqZ8vN9X', 'developer', 'backend'),
-('lead.carol', 'carol@company.com', '$2a$10$XV3LX8zJqKxN9PqJzK8L5eYqZ8vN9X2mK5L8PqJzK8L5eYqZ8vN9X', 'team_lead', 'platform'),
-('security.dave', 'dave@company.com', '$2a$10$XV3LX8zJqKxN9PqJzK8L5eYqZ8vN9X2mK5L8PqJzK8L5eYqZ8vN9X', 'security_admin', 'security'),
-('svc.gitlab', 'gitlab-ci@system.local', '$2a$10$XV3LX8zJqKxN9PqJzK8L5eYqZ8vN9X2mK5L8PqJzK8L5eYqZ8vN9X', 'service_account', 'automation');
+('dev.alice', 'alice@company.com', '$2a$10$K0BH/NSZpSS25QH57gc/4.isvL12g/MinXpJyThN2NvFvEtTgMmMi', 'developer', 'platform'),
+('dev.bob', 'bob@company.com', '$2a$10$8OkVUGh5s.S9l86KQcjuSeIDYn9wWelgJLC0Txr9ZlZXBVrHOVzyq', 'developer', 'backend'),
+('lead.carol', 'carol@company.com', '$2a$10$VnGIJzx6qA1mi3lgk96JO.qeORs/yiKPRtUxZI5nqsz/Z8QG/btCq', 'team_lead', 'platform'),
+('security.dave', 'dave@company.com', '$2a$10$uPA.hgJx/uXGdf0Hp.7GTeMOLNde1B4eiWR5lzuR4iOYI0Ko7rsUi', 'security_admin', 'security'),
+('svc.gitlab', 'gitlab-ci@system.local', '$2a$10$o7CC/UwL/527hWib8QgGrOnnv9MlvO863pFWwj6781KVxZZIXyFSe', 'service_account', 'automation');
 
 -- Secrets
 INSERT INTO secrets (name, description, classification, environment, owner_team, value) VALUES
-('DEV_DB_PASSWORD', 'Development database password', 'LOW', 'dev', 'platform', 'devpass123'),
-('STAGING_API_KEY', 'Staging API gateway key', 'MEDIUM', 'staging', 'backend', 'staging_key_abc123'),
-('PROD_API_KEY', 'Production API gateway key', 'HIGH', 'production', 'backend', 'prod_key_xyz789'),
-('PROD_DB_MASTER_PASSWORD', 'Production database master password - CRITICAL', 'CRITICAL', 'production', 'platform', 'SUPER_SECRET_PROD_DB_PASS_2024'),
-('AWS_ROOT_ACCESS_KEY', 'AWS root account access key', 'CRITICAL', 'production', 'security', 'AKIAIOSFODNN7EXAMPLE'),
-('GITLAB_WEBHOOK_SECRET', 'GitLab webhook verification secret', 'MEDIUM', 'production', 'platform', 'whsec_production_secret');
+('DEV_DB_PASSWORD', 'Development database password', 'LOW', 'dev', 'platform', 'flag{dev_db_8f2c1a7e5b904d3a}'),
+('STAGING_API_KEY', 'Staging API gateway key', 'MEDIUM', 'staging', 'backend', 'flag{staging_api_5c91d2e44abf76c8}'),
+('PROD_API_KEY', 'Production API gateway key', 'HIGH', 'production', 'backend', 'flag{prod_api_c7e41bf289d56a30}'),
+('PROD_DB_MASTER_PASSWORD', 'Production database master password - CRITICAL', 'CRITICAL', 'production', 'platform', 'flag{prod_db_master_3f8a6d1c9e247b50}'),
+('AWS_ROOT_ACCESS_KEY', 'AWS root account access key', 'CRITICAL', 'production', 'security', 'flag{aws_root_91b7c4e2d85fa630}'),
+('GITLAB_WEBHOOK_SECRET', 'GitLab webhook verification secret', 'MEDIUM', 'production', 'platform', 'flag{gitlab_webhook_2de9a41c7bf58360}');
 
 -- Integrations
 INSERT INTO integrations (name, provider, project_name, config) VALUES

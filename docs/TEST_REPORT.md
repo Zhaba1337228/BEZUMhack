@@ -309,10 +309,10 @@ r.GET("/api/internal/integrations/test/:id",
 | Username | Password | Role | Purpose |
 |----------|----------|------|---------|
 | `dev.alice` | `password123` | developer | Primary attacker account |
-| `dev.bob` | `password123` | developer | Secondary developer |
-| `lead.carol` | `password123` | team_lead | Can approve MEDIUM/HIGH |
-| `security.dave` | `password123` | security_admin | Can approve CRITICAL |
-| `svc.gitlab` | `password123` | service_account | Automation account |
+| `dev.bob` | not disclosed (strong random) | developer | Secondary developer |
+| `lead.carol` | not disclosed (strong random) | team_lead | Can approve MEDIUM/HIGH |
+| `security.dave` | not disclosed (strong random) | security_admin | Can approve CRITICAL |
+| `svc.gitlab` | not disclosed (strong random) | service_account | Automation account |
 
 ---
 
@@ -430,7 +430,7 @@ r.GET("/api/internal/integrations/test/:id",
 - CRITICAL: 2 (PROD_DB_MASTER_PASSWORD, AWS_ROOT_ACCESS_KEY)
 
 **Target Secret:** `PROD_DB_MASTER_PASSWORD`
-- Value: `SUPER_SECRET_PROD_DB_PASS_2024`
+- Value: `flag{prod_db_master_3f8a6d1c9e247b50}`
 - Classification: CRITICAL
 - Environment: production
 

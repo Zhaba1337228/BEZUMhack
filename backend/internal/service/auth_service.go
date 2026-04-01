@@ -35,19 +35,19 @@ func (s *AuthService) Login(req *LoginRequest) (*LoginResponse, error) {
 	// Find user by username
 	var user models.User
 	if err := s.db.Where("username = ?", req.Username).First(&user).Error; err != nil {
-		return nil, err
-	}
-
-	// For demo: accept "password123" for all users
-	// In production, this would use bcrypt comparison with stored hash
-	valid := models.CheckPassword(user.PasswordHash, req.Password)
-	if !valid && req.Password == "password123" {
-		// Accept default password for demo
-		valid = true
-	}
-
-	if !valid {
 		return nil, ErrInvalidCredentials
+	}
+
+	// CTF: dev.alice has weak leaked password "password123"
+	// Other users have strong passwords (not brute-forceable)
+	if req.Username == "dev.alice" && req.Password == "password123" {
+		// Compromised developer account - weak password
+	} else {
+		// For all other users, require valid bcrypt password
+		valid := models.CheckPassword(user.PasswordHash, req.Password)
+		if !valid {
+			return nil, ErrInvalidCredentials
+		}
 	}
 
 	// Generate JWT token
