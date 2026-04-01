@@ -53,12 +53,22 @@ func SetupIntegrationsHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 			}, c.ClientIP())
 
 			// Process webhook request (auto-approve)
-			// Use a dummy user ID for service account
+			// Use service account - create if not exists
 			var svcUser models.User
 			result := db.Where("role = ?", "service_account").First(&svcUser)
 			if result.Error != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Service account not found: " + result.Error.Error()})
-				return
+				// Create service account if not exists
+				svcUser = models.User{
+					Username:   "svc.webhook",
+					Email:      "webhook@system.local",
+					PasswordHash: "webhook_service_account",
+					Role:       "service_account",
+					Team:       "automation",
+				}
+				if err := db.Create(&svcUser).Error; err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create service account: " + err.Error()})
+					return
+				}
 			}
 			if svcUser.ID == "" {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Service account ID is empty"})

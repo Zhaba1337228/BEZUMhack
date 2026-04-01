@@ -158,3 +158,26 @@ INSERT INTO debug_config (key, value, sensitive, internal_only) VALUES
 -- Initial Audit Log
 INSERT INTO audit_logs (action, resource_type, details, ip_address) VALUES
 ('system_init', 'system', '{"message": "SecretFlow initialized"}', '127.0.0.1');
+
+-- Seed audit event for Attack Path 2
+INSERT INTO audit_logs (action, resource_type, resource_id, details, ip_address) VALUES
+(
+    'integration_token_used',
+    'integration_token',
+    (SELECT id FROM integration_tokens WHERE token = 'gf_prod_abc123xyz789'),
+    '{
+      "token_value": "gf_prod_abc123xyz789",
+      "token_id": "seeded-from-migration",
+      "integration_name": "GitLab CI",
+      "provider": "gitlab",
+      "project": "secretflow-prod",
+      "request_body": {
+        "justification": "CI/CD deployment seed event"
+      },
+      "diagnostic": {
+        "trust_level": "auto_approved",
+        "approval_bypassed": true
+      }
+    }',
+    '127.0.0.1'
+);

@@ -78,7 +78,8 @@
       "Bash(kill 18464)",
       "Bash(Get-Process -Name \"secretflow-backend\" -ErrorAction SilentlyContinue)",
       "Bash(Stop-Process -Force)",
-      "Bash(ls /d/hackaton/BEZUMhack/backend/*.go)"
+      "Bash(ls /d/hackaton/BEZUMhack/backend/*.go)",
+      "Bash(findstr \"5432\")"
     ]
   }
 }

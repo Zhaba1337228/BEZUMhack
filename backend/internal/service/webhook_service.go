@@ -6,6 +6,7 @@ import (
 
 	"secretflow/internal/models"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -61,6 +62,7 @@ func (s *WebhookService) ValidateToken(token string) (*models.IntegrationToken, 
 func (s *WebhookService) ProcessWebhookRequest(token *models.IntegrationToken, req *WebhookRequest, userID string) (*WebhookResponse, error) {
 	now := time.Now()
 	accessReq := &models.AccessRequest{
+		ID:            uuid.New().String(),
 		SecretID:      req.SecretID,
 		UserID:        userID,
 		Justification: req.Justification,
@@ -76,6 +78,7 @@ func (s *WebhookService) ProcessWebhookRequest(token *models.IntegrationToken, r
 	}
 
 	grant := &models.AccessGrant{
+		ID:        uuid.New().String(),
 		RequestID: accessReq.ID,
 		SecretID:  req.SecretID,
 		UserID:    userID,
