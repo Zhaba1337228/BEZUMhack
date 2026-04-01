@@ -165,23 +165,6 @@ INSERT INTO integration_tokens (integration_id, token, ...) VALUES
 
 ---
 
-### V4: Source Field Not Verified (CWE-284)
-
-**Location:** `backend/internal/handlers/internal.go:134-215`
-
-**Verified Implementation:**
-```go
-// Lines 152-158: Only checks string value, not actual origin
-trustedSources := []string{"webhook", "internal", "service_mesh"}
-if !contains(trustedSources, req.Source) {
-    return 403 Forbidden
-}
-// No verification that request actually came from trusted source
-```
-
-**Attack Path:** POST `/api/internal/secrets/grant` with `source: "webhook"` → auto-approved
-
----
 
 ### V5: Audit Logs Leak Sensitive Data (CWE-532)
 
@@ -225,23 +208,6 @@ grant := &models.AccessGrant{...}
 
 ---
 
-### V7: Missing Auth on Internal Endpoint (CWE-306)
-
-**Location:** `backend/internal/handlers/internal.go:217-261`
-
-**Verified Implementation:**
-```go
-// Line 218-219: No middleware.Auth() call
-r.POST("/api/internal/apply",
-    func(c *gin.Context) {
-        // No authentication check
-        // Assumes security through obscurity
-    })
-```
-
-**Attack Path:** Discover endpoint → POST with `bypass_classification_check: true` → approved
-
----
 
 ## 4. Dead End Verification (Authorization Works)
 
@@ -274,20 +240,6 @@ if err != nil {
 
 ---
 
-### Dead End 3: Internal Endpoint with Wrong Source
-
-**Flow:** POST `/api/internal/secrets/grant` with `source: "ui"` → 403
-
-**Verified in `backend/internal/handlers/internal.go:152-158`:**
-```go
-if !contains(trustedSources, req.Source) {
-    return 403 Forbidden
-}
-```
-
-**Result:** **BLOCKED** - Must use trusted source value
-
----
 
 ### Dead End 4: Integration Test Without Auth
 
@@ -346,23 +298,6 @@ r.GET("/api/internal/integrations/test/:id",
 
 ---
 
-### Path 3: Internal API Misuse
-
-**Steps:**
-1. Discover `/api/internal/secrets/grant` endpoint
-2. Learn trusted sources from error message: `webhook`, `internal`, `service_mesh`
-3. POST request with `source: "webhook"` and fake `source_context`
-4. Receive auto-approved grant with secret value
-
-**Alternative:**
-1. Discover `/api/internal/apply` (no auth)
-2. POST with `bypass_classification_check: true`
-3. Receive approval for pending request
-
-**Time to Compromise:** ~2 minutes
-
----
-
 ## 7. API Endpoint Reference
 
 ### Authentication
@@ -393,13 +328,11 @@ r.GET("/api/internal/integrations/test/:id",
 | GET | `/api/integrations` | JWT + Admin | List integrations |
 | POST | `/api/integrations/webhook` | Token | Webhook endpoint |
 
-### Internal API (Vulnerability Surface)
+### Internal API
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/internal/integrations/status` | JWT | **Leaks tokens** |
+| GET | `/api/internal/integrations/status` | JWT | Integration status |
 | GET | `/api/internal/integrations/test/:id` | JWT | Diagnostic test |
-| POST | `/api/internal/secrets/grant` | JWT | **Trusts source field** |
-| POST | `/api/internal/apply` | None | **No auth** |
 
 ### Audit
 | Method | Endpoint | Auth | Description |
@@ -504,19 +437,17 @@ npm run dev
 - [ ] View integrations
 - [ ] Call internal status endpoint
 - [ ] Call webhook with valid token
-- [ ] Call internal grant endpoint
+- [ ] Call internal status endpoint
 
 ### Attack Path Tests
 
 - [ ] Path 1: Extract token from status endpoint → webhook → CRITICAL secret
 - [ ] Path 2: Extract token from audit logs → replay webhook → CRITICAL secret
-- [ ] Path 3: Call internal grant with spoofed source → CRITICAL secret
 
 ### Dead End Tests
 
 - [ ] Normal CRITICAL request stays pending for developer
 - [ ] Webhook without token returns 401
-- [ ] Internal grant with `source: "ui"` returns 403
 - [ ] Integration test without JWT returns 401
 
 ---
@@ -542,13 +473,12 @@ npm run dev
 
 1. Monitor audit logs for participant progress
 2. Provide hints based on stuck points:
-   - "Have you checked what internal endpoints exist?"
    - "What information do operations teams need for debugging?"
    - "How does CI/CD automation get secrets?"
 
 ### Post-Exercise Discussion
 
-1. Review all 3 attack paths
+1. Review both attack paths
 2. Discuss why each vulnerability is plausible
 3. Connect to real-world incidents
 4. Emphasize defense-in-depth principles

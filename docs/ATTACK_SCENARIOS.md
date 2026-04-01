@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the three main attack paths to gain access to the CRITICAL secret `PROD_DB_MASTER_PASSWORD`.
+This document describes the two main attack paths to gain access to the CRITICAL secret `PROD_DB_MASTER_PASSWORD`.
 
 ---
 
@@ -146,85 +146,6 @@ This document describes the three main attack paths to gain access to the CRITIC
 
 ---
 
-## Attack Path 3: Internal API Misuse (Insufficient Trust Validation)
-
-**Difficulty:** Medium
-**Prerequisites:** Valid user account, API discovery
-
-### Steps
-
-1. **Discover internal API endpoints**
-   - Inspect network traffic or enumerate `/api/internal/` paths
-   - Find `/api/internal/secrets/grant`
-
-2. **Test the endpoint**
-   ```
-   POST /api/internal/secrets/grant
-   Content-Type: application/json
-
-   {
-     "secret_id": "<uuid>",
-     "user_id": "<your-user-id>",
-     "source": "ui"
-   }
-   ```
-
-3. **Learn source validation requirements**
-   - Error message reveals: "Invalid source. Must be one of: webhook, internal, service_mesh"
-   - Natural hint: These are the trusted automation sources
-
-4. **Exploit the trust assumption**
-   - The endpoint trusts the caller-provided `source` field
-   - No verification that the request actually came from a trusted system
-   ```
-   POST /api/internal/secrets/grant
-   {
-     "secret_id": "<uuid-of-critical-secret>",
-     "user_id": "<your-user-id>",
-     "source": "webhook",
-     "source_context": {
-       "integration_id": "fake-id",
-       "pipeline": "gitlab-ci"
-     }
-   }
-   ```
-
-5. **Receive auto-approved grant with secret value**
-   - Backend creates grant with `auto_approved = true`
-   - Response includes the secret value:
-   ```json
-   {
-     "grant": {
-       "id": "uuid",
-       "auto_approved": true,
-       "secret_value": "flag{prod_db_master_3f8a6d1c9e247b50}",
-       "expires_at": "..."
-     }
-   }
-   ```
-
-### Alternative: Use /api/internal/apply endpoint
-
-```
-POST /api/internal/apply
-{
-  "request_id": "<pending-request-id>",
-  "bypass_classification_check": true,
-  "source": "internal"
-}
-```
-
-This endpoint has no authentication check at all (security through obscurity).
-
-### Why This Works
-
-- Internal API trusts caller-provided `source` field without verification
-- `source_context` is also caller-controlled and not validated
-- Classification-based approval is bypassed for trusted sources
-- No mechanism to verify the request actually came from a trusted system
-
----
-
 ## Dead Ends (What Doesn't Work)
 
 ### Dead End 1: Normal Request Flow
@@ -247,24 +168,13 @@ POST /api/integrations/webhook
 - Token validation queries database for exact match
 - **Learning:** Webhook is protected. Need valid token first.
 
-### Dead End 3: Internal Endpoint with Wrong Source
-```
-POST /api/internal/secrets/grant
-{
-  "source": "ui"
-}
-```
-- Returns 403 Forbidden: "Invalid source"
-- Source must be `webhook`, `internal`, or `service_mesh`
-- **Learning:** Must use trusted source value
-
-### Dead End 4: Accessing LOW/MEDIUM Secrets Only
+### Dead End 3: Accessing LOW/MEDIUM Secrets Only
 - Browsing secrets catalog shows CRITICAL secrets exist
 - Can freely access LOW/MEDIUM secrets but they don't contain the target
 - `PROD_DB_MASTER_PASSWORD` is CRITICAL classification
 - **Learning:** CRITICAL secrets are the goal. Normal path blocked.
 
-### Dead End 5: Integration Test Without Auth
+### Dead End 4: Integration Test Without Auth
 ```
 GET /api/internal/integrations/test/:id
 ```
@@ -281,10 +191,8 @@ GET /api/internal/integrations/test/:id
 | V1 | Integration status leaks tokens | CWE-215 | GET /api/internal/integrations/status |
 | V2 | Tokens in plaintext | CWE-256 | integration_tokens table |
 | V3 | Token scope not enforced | CWE-284 | webhook_service.go |
-| V4 | Source field not verified | CWE-284 | POST /api/internal/secrets/grant |
-| V5 | Audit logs leak sensitive data | CWE-532 | audit_logs.details |
-| V6 | Classification bypass | CWE-284 | approval_service.go |
-| V7 | Missing auth on internal endpoint | CWE-306 | POST /api/internal/apply |
+| V4 | Audit logs leak sensitive data | CWE-532 | audit_logs.details |
+| V5 | Classification bypass | CWE-284 | approval_service.go |
 
 ---
 
@@ -301,9 +209,6 @@ The system includes realistic operational messages that guide attackers:
    - Shows `auth_token` field for "connectivity debugging"
    - Shows `webhook_url` for integration endpoint
 
-3. **Error messages:**
-   - "Invalid source. Must be one of: webhook, internal, service_mesh"
-   - Tells attacker exactly which values are trusted
 
 ---
 

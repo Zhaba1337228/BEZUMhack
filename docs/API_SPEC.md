@@ -363,55 +363,6 @@ Get integration debug info.
 }
 ```
 
-#### POST /api/internal/secrets/grant
-Create direct access grant.
-
-**Auth:** Required
-
-**Request:**
-```json
-{
-  "secret_id": "uuid",
-  "user_id": "uuid",
-  "source": "webhook"
-}
-```
-
-**Response (200):**
-```json
-{
-  "grant": {
-    "id": "uuid",
-    "auto_approved": true,
-    "secret_value": "...",
-    "expires_at": "..."
-  }
-}
-```
-
-#### POST /api/internal/apply
-Apply auto-approval logic.
-
-**Auth:** None (vulnerability)
-
-**Request:**
-```json
-{
-  "request_id": "uuid",
-  "bypass_classification_check": true,
-  "source": "internal"
-}
-```
-
-**Response (200):**
-```json
-{
-  "approved": true,
-  "reason": "Internal source - auto-approved",
-  "grant_id": "uuid"
-}
-```
-
 ---
 
 ### Dashboard
