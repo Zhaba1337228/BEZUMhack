@@ -137,13 +137,15 @@ export default function Notifications() {
       // Get recent requests for current user
       const requestsData = await api.getRequests({ mine: 'true' })
 
-      // Get audit logs for recent activity
+      // Get audit logs for recent activity (security_admin only)
       let auditLogs: any[] = []
-      try {
-        const logsData = await api.getAuditLogs({ limit: '10' })
-        auditLogs = logsData.logs || []
-      } catch (e) {
-        // Non-admin users can't access audit logs
+      if (user?.role === 'security_admin') {
+        try {
+          const logsData = await api.getAuditLogs({ limit: '10' })
+          auditLogs = logsData.logs || []
+        } catch (e) {
+          // Ignore: audit logs might be temporarily unavailable
+        }
       }
 
       const newNotifications: Notification[] = []

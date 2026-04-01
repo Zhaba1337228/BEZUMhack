@@ -5,16 +5,14 @@ services:
     image: postgres:15-alpine
     container_name: secretflow-db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: Rrobocopid12
-      POSTGRES_DB: secretflow
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/migrations:/docker-entrypoint-initdb.d
-    ports:
-      - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U secretflow -d secretflow"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -25,17 +23,17 @@ services:
       dockerfile: Dockerfile
     container_name: secretflow-backend
     environment:
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_NAME: secretflow
-      DB_USER: postgres
-      DB_PASSWORD: Rrobocopid12
-      JWT_SECRET: super_secret_jwt_key_change_in_production
-      JWT_EXPIRY_HOURS: 24
-      BACKEND_PORT: 8080
-      BACKEND_HOST: 0.0.0.0
-      FRONTEND_URL: http://localhost:3000
-      ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRY_HOURS: ${JWT_EXPIRY_HOURS}
+      BACKEND_PORT: ${BACKEND_PORT}
+      BACKEND_HOST: ${BACKEND_HOST}
+      FRONTEND_URL: ${FRONTEND_URL}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
     ports:
       - "8080:8080"
     depends_on:

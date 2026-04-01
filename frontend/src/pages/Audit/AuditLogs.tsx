@@ -54,29 +54,25 @@ export default function AuditLogs() {
     options,
     value,
     onChange,
-    label,
     width = 'w-56'
   }: {
     options: ActionOption[]
     value: string
     onChange: (val: string) => void
-    label: string
     width?: string
   }) => {
     const selectedOption = options.find(opt => opt.value === value)
     const IconComponent = selectedOption?.icon
 
     return (
-      <div className="flex items-center gap-2">
-        <label className="text-sm font-medium text-surface-600">{label}:</label>
-        <Menu as="div" className={`relative ${width}`}>
-          <Menu.Button className="w-full flex items-center justify-between gap-2 px-4 py-2.5 bg-white border border-surface-200 rounded-xl text-sm font-medium text-surface-700 hover:bg-surface-50 hover:border-surface-300 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all shadow-sm">
-            <span className="flex items-center gap-2">
-              {IconComponent && <IconComponent className={`w-4 h-4 ${selectedOption?.color || 'text-surface-500'}`} />}
-              <span className={selectedOption?.color || ''}>{selectedOption?.label}</span>
-            </span>
-            <ChevronDown className="w-4 h-4 text-surface-400 transition-transform" />
-          </Menu.Button>
+      <Menu as="div" className={`relative ${width}`}>
+        <Menu.Button className="w-full flex items-center justify-between gap-2 px-4 py-2.5 bg-white border border-surface-200 rounded-xl text-sm font-medium text-surface-700 hover:bg-surface-50 hover:border-surface-300 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all shadow-sm">
+          <span className="flex items-center gap-2">
+            {IconComponent && <IconComponent className={`w-4 h-4 ${selectedOption?.color || 'text-surface-500'}`} />}
+            <span className={selectedOption?.color || ''}>{selectedOption?.label}</span>
+          </span>
+          <ChevronDown className="w-4 h-4 text-surface-400 transition-transform" />
+        </Menu.Button>
 
           <Transition
             as={Fragment}
@@ -118,7 +114,6 @@ export default function AuditLogs() {
             </Menu.Items>
           </Transition>
         </Menu>
-      </div>
     )
   }
 
@@ -247,71 +242,21 @@ export default function AuditLogs() {
       )}
 
       {/* Filters */}
-      <div className="bg-white rounded-xl shadow-soft p-5 border border-slate-200">
-        <div className="flex items-center gap-2 mb-4">
-          <Filter className="w-4 h-4 text-slate-700" />
-          <h2 className="text-sm font-semibold text-slate-900">Filters</h2>
-        </div>
-        <div className="flex flex-wrap items-center gap-4">
-          {/* Search */}
-          <div className="relative flex-1 min-w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-            <input
-              type="text"
-              placeholder="Search by action, user, purpose..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-500 hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
-            />
+      <div className="bg-white rounded-xl shadow-soft p-5 border border-surface-200">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-brand-50 rounded-lg">
+              <Filter className="w-4 h-4 text-brand-600" />
+            </div>
+            <h2 className="text-sm font-semibold text-surface-900">Filters</h2>
           </div>
-
-          {/* Action Filter */}
-          <FilterDropdown
-            label="Action"
-            options={actionOptions}
-            value={actionFilter}
-            onChange={(val) => setActionFilter(val)}
-            width="w-52"
-          />
-
-          {/* Risky Toggle */}
-          <label
-            className={`group flex items-center gap-3 px-3.5 py-2.5 rounded-xl border cursor-pointer select-none transition-all ${
-              riskyOnly
-                ? 'bg-red-50 border-red-300 text-red-700'
-                : 'bg-white border-slate-300 text-slate-800 hover:bg-slate-50'
-            }`}
-          >
-            <input
-              type="checkbox"
-              checked={riskyOnly}
-              onChange={(e) => {
-                setRiskyOnly(e.target.checked)
-                setTimeout(loadLogs, 50)
-              }}
-              className="sr-only peer"
-            />
-            <span
-              className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
-                riskyOnly
-                  ? 'bg-red-600 border-red-600 text-white'
-                  : 'bg-white border-slate-400 text-transparent group-hover:border-slate-500'
-              } peer-focus:ring-2 peer-focus:ring-brand-500 peer-focus:ring-offset-1`}
-            >
-              <Check className="w-3.5 h-3.5" />
-            </span>
-            <Shield className={`w-4 h-4 ${riskyOnly ? 'text-red-600' : 'text-slate-500'}`} />
-            <span className="text-sm font-medium">Risky only</span>
-          </label>
-
-          {/* Apply & Clear */}
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center gap-2">
             <button
               onClick={loadLogs}
-              className="flex items-center gap-2 px-4 py-2.5 bg-brand-600 text-white rounded-xl text-sm font-medium hover:bg-brand-700 transition-all"
+              className="flex items-center gap-2 px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-700 transition-all shadow-sm"
             >
-              <Filter className="w-4 h-4" />
-              Apply
+              <RefreshCw className="w-4 h-4" />
+              Apply Filters
             </button>
             <button
               onClick={() => {
@@ -321,43 +266,109 @@ export default function AuditLogs() {
                 setRiskyOnly(false)
                 loadLogs()
               }}
-              className="flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all font-medium"
+              className="flex items-center gap-2 px-4 py-2 text-sm text-surface-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all font-medium"
             >
               <XCircle className="w-4 h-4" />
-              Clear
+              Clear all
             </button>
           </div>
         </div>
 
-        {/* Second row - Secret ID filters */}
-        <div className="flex flex-wrap items-center gap-4 mt-4 pt-4 border-t border-slate-200">
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-slate-800">Secret ID (logs):</label>
+        {/* First row - Search, Action, Risky */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Search */}
+          <div className="relative flex-1 min-w-72">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400" />
             <input
               type="text"
-              placeholder="Enter secret UUID"
+              placeholder="Search logs..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-surface-50 border border-surface-200 rounded-xl text-sm text-surface-900 placeholder:text-surface-500 hover:bg-white hover:border-surface-300 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all"
+            />
+          </div>
+
+          {/* Action Filter Dropdown */}
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-surface-500 uppercase tracking-wide">Action:</label>
+            <FilterDropdown
+              options={actionOptions}
+              value={actionFilter}
+              onChange={(val) => setActionFilter(val)}
+              width="w-52"
+            />
+          </div>
+
+          {/* Risky Toggle - Custom Checkbox */}
+          <label className="group flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-surface-50 border border-surface-200 cursor-pointer select-none hover:bg-red-50 hover:border-red-200 transition-all">
+            <input
+              type="checkbox"
+              checked={riskyOnly}
+              onChange={(e) => {
+                setRiskyOnly(e.target.checked)
+                setTimeout(loadLogs, 30)
+              }}
+              className="sr-only peer"
+            />
+            {/* Custom checkbox */}
+            <span
+              className={`relative w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${
+                riskyOnly
+                  ? 'bg-red-600 border-red-600'
+                  : 'bg-white border-surface-300 group-hover:border-red-300'
+              } peer-focus:ring-2 peer-focus:ring-red-500 peer-focus:ring-offset-1`}
+            >
+              <Check
+                className={`w-3.5 h-3.5 transition-all ${
+                  riskyOnly ? 'text-white opacity-100' : 'text-transparent opacity-0'
+                }`}
+                strokeWidth={3}
+              />
+            </span>
+            <Shield
+              className={`w-4 h-4 transition-colors ${
+                riskyOnly ? 'text-red-600' : 'text-surface-400 group-hover:text-red-400'
+              }`}
+            />
+            <span
+              className={`text-sm font-medium transition-colors ${
+                riskyOnly ? 'text-red-700' : 'text-surface-600 group-hover:text-red-600'
+              }`}
+            >
+              Risky only
+            </span>
+          </label>
+        </div>
+
+        {/* Second row - Secret ID filters */}
+        <div className="flex flex-wrap items-center gap-3 mt-3 pt-4 border-t border-surface-100">
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-surface-500 uppercase tracking-wide">Secret ID (logs):</label>
+            <input
+              type="text"
+              placeholder="UUID for filtering logs"
               value={secretIdFilter}
               onChange={(e) => setSecretIdFilter(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') loadLogs()
               }}
-              className="w-64 px-4 py-2.5 border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-500 hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
+              className="w-72 px-4 py-2.5 bg-surface-50 border border-surface-200 rounded-xl text-sm text-surface-900 placeholder:text-surface-500 hover:bg-white hover:border-surface-300 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all"
             />
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-slate-800">Secret ID (timeline):</label>
+            <label className="text-xs font-medium text-surface-500 uppercase tracking-wide">Secret ID (timeline):</label>
             <input
               type="text"
-              placeholder="Enter secret UUID"
+              placeholder="UUID to build timeline"
               value={timelineSecretId}
               onChange={(e) => setTimelineSecretId(e.target.value)}
-              className="w-64 px-4 py-2.5 border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-500 hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all"
+              className="w-64 px-4 py-2.5 bg-surface-50 border border-surface-200 rounded-xl text-sm text-surface-900 placeholder:text-surface-500 hover:bg-white hover:border-surface-300 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white transition-all"
             />
             <button
               onClick={loadTimeline}
               disabled={timelineLoading || !timelineSecretId.trim()}
-              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium text-slate-900 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-surface-200 rounded-xl text-sm font-medium text-surface-700 hover:bg-surface-50 hover:border-surface-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
             >
               <Activity className="w-4 h-4" />
               Build Timeline

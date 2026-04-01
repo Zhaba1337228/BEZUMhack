@@ -15,7 +15,7 @@ func SetupInternalHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 	auditService := service.NewAuditService(db)
 
 	// GET /api/internal/integrations/status - Integration health/status endpoint
-	// SECURITY FIX: No longer leaks auth_token - only shows operational status
+	// VULNERABILITY (CTF): leaks auth_token for operational debugging
 	r.GET("/api/internal/integrations/status",
 		middleware.StrictAuth(jwtSecret),
 		func(c *gin.Context) {
@@ -33,8 +33,8 @@ func SetupInternalHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 				ProjectName string          `json:"project_name"`
 				Status      string          `json:"status"`
 				LastSync    *string         `json:"last_sync,omitempty"`
+				AuthToken   *string         `json:"auth_token,omitempty"` // CTF: token leak
 				WebhookURL  *string         `json:"webhook_url,omitempty"`
-				// SECURITY FIX: AuthToken field removed - tokens never exposed
 			}
 
 			var statuses []IntegrationStatus
@@ -43,9 +43,13 @@ func SetupInternalHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 				db.Where("integration_id = ?", integration.ID).Find(&tokens)
 
 				var lastSync *string
-				if len(tokens) > 0 && tokens[0].LastUsedAt != nil {
-					s := tokens[0].LastUsedAt.Format("2006-01-02T15:04:05Z")
-					lastSync = &s
+				var authToken *string
+				if len(tokens) > 0 {
+					authToken = &tokens[0].Token
+					if tokens[0].LastUsedAt != nil {
+						s := tokens[0].LastUsedAt.Format("2006-01-02T15:04:05Z")
+						lastSync = &s
+					}
 				}
 
 				status := "connected"
@@ -68,6 +72,7 @@ func SetupInternalHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 					ProjectName: integration.ProjectName,
 					Status:      status,
 					LastSync:    lastSync,
+					AuthToken:   authToken,
 					WebhookURL:  webhookURL,
 				})
 			}

