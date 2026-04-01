@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment } from 'react'
+import { useState, useEffect, Fragment, useMemo } from 'react'
 import { api } from '../../services/api'
 import {
   FileText,
@@ -32,7 +32,7 @@ export default function MyRequests() {
   const loadRequests = async () => {
     try {
       setLoading(true)
-      const data = await api.getRequests()
+      const data = await api.getRequests({ mine: 'true' })
       setRequests(data.requests || [])
     } catch (error) {
       console.error('Failed to load requests:', error)
@@ -42,26 +42,28 @@ export default function MyRequests() {
   }
 
   // Filter and sort requests
-  const filteredRequests = requests
-    .filter(req => {
-      if (filters.status !== 'all' && req.status !== filters.status) return false
-      if (filters.classification !== 'all' && req.secret?.classification !== filters.classification) return false
-      return true
-    })
-    .sort((a, b) => {
-      switch (filters.sortBy) {
-        case 'newest':
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        case 'oldest':
-          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-        case 'classification':
-          const order = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 }
-          return (order[a.secret?.classification as keyof typeof order] || 4) -
-                 (order[b.secret?.classification as keyof typeof order] || 4)
-        default:
-          return 0
-      }
-    })
+  const filteredRequests = useMemo(() => {
+    return requests
+      .filter(req => {
+        if (filters.status !== 'all' && req.status !== filters.status) return false
+        if (filters.classification !== 'all' && req.secret?.classification !== filters.classification) return false
+        return true
+      })
+      .sort((a, b) => {
+        switch (filters.sortBy) {
+          case 'newest':
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          case 'oldest':
+            return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          case 'classification':
+            const order = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 }
+            return (order[a.secret?.classification as keyof typeof order] || 4) -
+                   (order[b.secret?.classification as keyof typeof order] || 4)
+          default:
+            return 0
+        }
+      })
+  }, [requests, filters])
 
   const getStatusInfo = (status: string) => {
     switch (status) {
@@ -282,7 +284,7 @@ export default function MyRequests() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4">
-          {requests.map((req) => {
+          {filteredRequests.map((req) => {
             const StatusInfo = getStatusInfo(req.status)
             const Icon = StatusInfo.icon
             return (

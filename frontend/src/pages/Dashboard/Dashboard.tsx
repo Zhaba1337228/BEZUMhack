@@ -148,25 +148,28 @@ export default function Dashboard() {
             <h2 className="text-lg font-semibold text-surface-900">Secrets by Classification</h2>
           </div>
           <div className="space-y-3">
-            {summary?.secrets_by_classification?.map((c: any) => (
+            {summary?.secrets_by_classification?.map((row: any) => {
+              const classification = row.classification || row.Classification || 'LOW'
+              const count = row.count ?? row.Count ?? 0
+              return (
               <div
-                key={c.classification}
-                className={`flex items-center justify-between p-3 rounded-lg border ${getClassBg(c.classification)}`}
+                key={classification}
+                className={`flex items-center justify-between p-3 rounded-lg border ${getClassBg(classification)}`}
               >
                 <div className="flex items-center gap-3">
                   <div className={`w-2 h-2 rounded-full ${
-                    c.classification === 'CRITICAL' ? 'bg-red-500' :
-                    c.classification === 'HIGH' ? 'bg-orange-500' :
-                    c.classification === 'MEDIUM' ? 'bg-yellow-500' :
+                    classification === 'CRITICAL' ? 'bg-red-500' :
+                    classification === 'HIGH' ? 'bg-orange-500' :
+                    classification === 'MEDIUM' ? 'bg-yellow-500' :
                     'bg-green-500'
                   }`}></div>
-                  <span className={`text-sm font-medium ${getClassColor(c.classification)}`}>
-                    {c.classification}
+                  <span className={`text-sm font-medium ${getClassColor(classification)}`}>
+                    {classification}
                   </span>
                 </div>
-                <span className="text-lg font-bold text-surface-900">{c.count}</span>
+                <span className="text-lg font-bold text-surface-900">{count}</span>
               </div>
-            ))}
+            )})}
           </div>
         </div>
 

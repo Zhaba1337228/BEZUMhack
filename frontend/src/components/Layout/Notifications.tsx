@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect, useRef } from 'react'
+import Cookies from 'js-cookie'
 import { Bell, Check, ChevronRight, AlertCircle, Info, Shield, Key } from 'lucide-react'
 import { api } from '../../services/api'
 import { useAuth } from '../../context/AuthContext'
@@ -15,6 +16,14 @@ export interface Notification {
   requestId?: string
 }
 
+const READ_NOTIFICATIONS_COOKIE = 'sf_read_notifications'
+const COOKIE_OPTIONS: Cookies.CookieAttributes = {
+  expires: 7,
+  secure: window.location.protocol === 'https:',
+  sameSite: 'strict',
+  path: '/',
+}
+
 export default function Notifications() {
   const { user } = useAuth()
   const [isOpen, setIsOpen] = useState(false)
@@ -22,6 +31,25 @@ export default function Notifications() {
   const [loading, setLoading] = useState(false)
   const [connected, setConnected] = useState(false)
   const eventSourceRef = useRef<EventSource | null>(null)
+
+  // Get read notification IDs from secure cookie
+  const getReadNotificationIds = (): Set<string> => {
+    try {
+      const stored = Cookies.get(READ_NOTIFICATIONS_COOKIE)
+      return stored ? new Set(JSON.parse(stored)) : new Set()
+    } catch {
+      return new Set()
+    }
+  }
+
+  // Save read notification IDs to secure cookie
+  const saveReadNotificationIds = (ids: Set<string>) => {
+    try {
+      Cookies.set(READ_NOTIFICATIONS_COOKIE, JSON.stringify(Array.from(ids)), COOKIE_OPTIONS)
+    } catch (e) {
+      console.error('Failed to save read notifications:', e)
+    }
+  }
 
   // Setup SSE connection for real-time notifications
   useEffect(() => {
@@ -104,8 +132,10 @@ export default function Notifications() {
   const loadNotifications = async () => {
     try {
       setLoading(true)
+      const readIds = getReadNotificationIds()
+
       // Get recent requests for current user
-      const requestsData = await api.getRequests()
+      const requestsData = await api.getRequests({ mine: 'true' })
 
       // Get audit logs for recent activity
       let auditLogs: any[] = []
@@ -120,6 +150,7 @@ export default function Notifications() {
 
       // Add recent requests as notifications (pending/approved/denied)
       requestsData.requests?.slice(0, 5).forEach((req: any) => {
+        const id = `req-${req.id}`
         const status = req.status || 'pending'
         const type: Notification['type'] = status === 'approved'
           ? 'grant'
@@ -133,12 +164,12 @@ export default function Notifications() {
             : 'Pending approval'
 
         newNotifications.push({
-          id: `req-${req.id}`,
+          id,
           type,
           title: req.secret?.name || 'Access Request',
           message: `${statusMessage}: ${req.justification}`,
           timestamp: new Date(req.created_at).toLocaleString(),
-          read: false,
+          read: readIds.has(id),
           actionUrl: '/requests',
           requestId: req.id,
         })
@@ -149,13 +180,14 @@ export default function Notifications() {
         .filter(log => log.action === 'access_grant_created')
         .slice(0, 3)
         .forEach((log) => {
+          const id = `grant-${log.id}`
           newNotifications.push({
-            id: `grant-${log.id}`,
+            id,
             type: 'grant',
             title: 'Access Granted',
             message: log.details?.message || 'New access grant created',
             timestamp: new Date(log.timestamp).toLocaleString(),
-            read: false,
+            read: readIds.has(id),
             actionUrl: '/secrets',
             secretId: log.details?.secret_id,
           })
@@ -166,13 +198,14 @@ export default function Notifications() {
         .filter(log => log.details?.classification === 'CRITICAL' && log.action === 'access_grant_created')
         .slice(0, 2)
         .forEach((log) => {
+          const id = `alert-${log.id}`
           newNotifications.push({
-            id: `alert-${log.id}`,
+            id,
             type: 'alert',
             title: 'Critical Secret Accessed',
             message: `${log.details?.secret_name || 'Secret'} access granted via ${log.details?.reason || 'automation'}`,
             timestamp: new Date(log.timestamp).toLocaleString(),
-            read: false,
+            read: readIds.has(id),
             actionUrl: '/audit',
           })
         })
@@ -186,13 +219,35 @@ export default function Notifications() {
   }
 
   const markAsRead = (id: string) => {
+    const readIds = getReadNotificationIds()
+    readIds.add(id)
+    saveReadNotificationIds(readIds)
+
     setNotifications(prev =>
       prev.map(n => n.id === id ? { ...n, read: true } : n)
     )
   }
 
   const markAllAsRead = () => {
+    const allIds = notifications.map(n => n.id)
+    const readIds = getReadNotificationIds()
+    allIds.forEach(id => readIds.add(id))
+    saveReadNotificationIds(readIds)
+
     setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+  }
+
+  const handleNotificationClick = (notification: Notification) => {
+    // Mark as read immediately
+    markAsRead(notification.id)
+
+    // Navigate after a short delay to ensure state update
+    if (notification.actionUrl) {
+      const url = notification.actionUrl
+      setTimeout(() => {
+        window.location.href = url
+      }, 50)
+    }
   }
 
   const unreadCount = notifications.filter(n => !n.read).length
@@ -286,12 +341,7 @@ export default function Notifications() {
               {notifications.map((notification) => (
                 <div
                   key={notification.id}
-                  onClick={() => {
-                    markAsRead(notification.id)
-                    if (notification.actionUrl) {
-                      window.location.href = notification.actionUrl
-                    }
-                  }}
+                  onClick={() => handleNotificationClick(notification)}
                   className={`flex items-start gap-3 px-4 py-3 border-b border-surface-50 cursor-pointer transition-all ${
                     !notification.read
                       ? 'bg-blue-50/50 hover:bg-blue-50'
@@ -350,4 +400,5 @@ export default function Notifications() {
     </div>
   )
 }
+
 

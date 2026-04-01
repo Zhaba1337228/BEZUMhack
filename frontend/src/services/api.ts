@@ -84,6 +84,18 @@ class ApiClient {
     return this.request<{ logs: any[] }>(`/api/audit/logs${qs ? '?' + qs : ''}`)
   }
 
+  async getAuditTimeline(secretId: string, params?: Record<string, string>) {
+    const qs = new URLSearchParams(params).toString()
+    return this.request<{ secret: any; timeline: any[] }>(`/api/audit/timeline/${secretId}${qs ? '?' + qs : ''}`)
+  }
+
+  async exportAuditCsv(params?: Record<string, string>) {
+    const token = localStorage.getItem('token')
+    const query = new URLSearchParams(params || {})
+    if (token) query.set('token', token)
+    return `${API_URL}/api/audit/export.csv${query.toString() ? '?' + query.toString() : ''}`
+  }
+
   // Integrations (admin only)
   async getIntegrations() {
     return this.request<{ integrations: any[] }>('/api/integrations')

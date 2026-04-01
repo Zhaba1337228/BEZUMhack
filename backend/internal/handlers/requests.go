@@ -24,11 +24,16 @@ func SetupRequestsHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 			userRole, _ := c.Get("role")
 
 			pendingOnly := c.Query("pending") == "true"
+			mineOnly := c.Query("mine") == "true"
 			status := c.Query("status")
 
 			// Security admin sees all, others see only their requests
 			listUserID := ""
 			if userRole != "security_admin" {
+				listUserID = userID.(string)
+			}
+			// Explicit override for "My Requests" page
+			if mineOnly {
 				listUserID = userID.(string)
 			}
 

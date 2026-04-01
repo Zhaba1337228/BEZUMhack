@@ -29,6 +29,7 @@ const (
 	ActionLoginSuccess        AuditAction = "login_success"
 	ActionLoginFailure        AuditAction = "login_failure"
 	ActionSecretView          AuditAction = "secret_view"
+	ActionSecretValueRevealed AuditAction = "secret_value_revealed"
 	ActionSecretAccessRequest AuditAction = "secret_access_request"
 	ActionRequestApproved     AuditAction = "access_request_approved"
 	ActionRequestDenied       AuditAction = "access_request_denied"

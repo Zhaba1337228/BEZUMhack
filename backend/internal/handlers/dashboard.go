@@ -40,8 +40,8 @@ func SetupDashboardHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 
 			// Count secrets by classification
 			type ClassCount struct {
-				Classification string `gorm:"column:classification"`
-				Count          int64  `gorm:"column:count"`
+				Classification string `gorm:"column:classification" json:"classification"`
+				Count          int64  `gorm:"column:count" json:"count"`
 			}
 			var classCounts []ClassCount
 			db.Model(&models.Secret{}).

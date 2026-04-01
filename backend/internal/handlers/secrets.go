@@ -134,6 +134,15 @@ func SetupSecretsHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 					"value": secret.Value,
 				},
 			})
+
+			userIDStr := userID.(string)
+			_ = auditService.Log(service.ActionSecretValueRevealed, &userIDStr, "secret", &secretID,
+				map[string]interface{}{
+					"secret_id":       secretID,
+					"secret_name":     secret.Name,
+					"classification":  secret.Classification,
+					"justification":   "Direct secret value reveal endpoint usage",
+				}, c.ClientIP())
 		})
 
 	// POST /api/secrets/:id/request - Request access
@@ -141,6 +150,7 @@ func SetupSecretsHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 		middleware.Auth(jwtSecret),
 		func(c *gin.Context) {
 			userID, _ := c.Get("userID")
+			userRole, _ := c.Get("role")
 			secretID := c.Param("id")
 
 			var req struct {
@@ -158,11 +168,15 @@ func SetupSecretsHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 				return
 			}
 
-			// Determine required approver
-			requiredApprover := service.GetRequiredApproverRole(secret.Classification)
+			// Security admins get auto-approved for any secret
+			isAutoApproved := userRole == "security_admin"
 
-			// LOW classification is auto-approved
-			isAutoApproved := requiredApprover == ""
+			// LOW classification is also auto-approved
+			if !isAutoApproved {
+				requiredApprover := service.GetRequiredApproverRole(secret.Classification)
+				isAutoApproved = requiredApprover == ""
+			}
+
 			status := "approved"
 			if !isAutoApproved {
 				status = "pending"
@@ -210,17 +224,16 @@ func SetupSecretsHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 				map[string]interface{}{
 					"secret_id":         secretID,
 					"classification":    secret.Classification,
-					"requires_approval": requiredApprover,
+					"requires_approval": !isAutoApproved,
 					"auto_approved":     isAutoApproved,
 				}, c.ClientIP())
 
 			c.JSON(http.StatusCreated, gin.H{
 				"request": map[string]interface{}{
-					"id":                     accessReq.ID,
-					"secret_id":              secretID,
-					"status":                 status,
-					"auto_approved":          isAutoApproved,
-					"requires_approval_from": requiredApprover,
+					"id":            accessReq.ID,
+					"secret_id":     secretID,
+					"status":        status,
+					"auto_approved": isAutoApproved,
 				},
 			})
 		})
