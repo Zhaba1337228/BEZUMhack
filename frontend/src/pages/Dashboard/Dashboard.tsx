@@ -1,18 +1,30 @@
 import { useState, useEffect } from 'react'
 import { api } from '../../services/api'
+import { useAuth } from '../../context/AuthContext'
 import { Key, Clock, CheckCircle, Shield, ArrowRight, AlertCircle } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 export default function Dashboard() {
+  const { user } = useAuth()
   const [summary, setSummary] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     api.getDashboardSummary()
-      .then(setSummary)
-      .catch(console.error)
+      .then((data) => {
+        console.log('Dashboard summary:', data)
+        setSummary(data)
+        setError('')
+      })
+      .catch((err) => {
+        console.error('Failed to load dashboard:', err)
+        setError('Failed to load dashboard data')
+      })
       .finally(() => setLoading(false))
   }, [])
+
+  const isAdmin = user?.role === 'team_lead' || user?.role === 'security_admin'
 
   if (loading) {
     return (
@@ -20,6 +32,18 @@ export default function Dashboard() {
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-surface-500">Loading dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <p className="text-surface-900 font-medium">{error}</p>
+          <p className="text-surface-500 text-sm mt-1">Make sure the backend server is running</p>
         </div>
       </div>
     )
@@ -34,22 +58,22 @@ export default function Dashboard() {
       bgColor: 'bg-green-50',
     },
     {
-      label: 'Pending Requests',
+      label: 'My Pending Requests',
       value: summary?.my_pending_requests || 0,
       icon: Clock,
       color: 'text-yellow-600',
       bgColor: 'bg-yellow-50',
     },
-    {
-      label: 'Pending Approvals',
+    ...(isAdmin ? [{
+      label: 'Awaiting My Approval',
       value: summary?.pending_approvals || 0,
       icon: Shield,
       color: 'text-purple-600',
       bgColor: 'bg-purple-50',
-    },
+    }] : []),
     {
       label: 'Total Secrets',
-      value: summary?.secrets_by_classification?.reduce((sum: any, c: any) => sum + c.count, 0) || 0,
+      value: summary?.total_secrets || summary?.secrets_by_classification?.reduce((sum: any, c: any) => sum + c.count, 0) || 0,
       icon: Key,
       color: 'text-brand-600',
       bgColor: 'bg-brand-50',

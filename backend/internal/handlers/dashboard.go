@@ -18,6 +18,10 @@ func SetupDashboardHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 			userID, _ := c.Get("userID")
 			userRole, _ := c.Get("role")
 
+			// Count total secrets
+			var totalSecrets int64
+			db.Model(&models.Secret{}).Count(&totalSecrets)
+
 			// Count secrets by classification
 			type ClassCount struct {
 				Classification string `gorm:"column:classification"`
@@ -50,6 +54,7 @@ func SetupDashboardHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 			}
 
 			c.JSON(http.StatusOK, gin.H{
+				"total_secrets":             totalSecrets,
 				"secrets_by_classification": classCounts,
 				"my_pending_requests":       pendingCount,
 				"my_active_grants":          grantCount,
