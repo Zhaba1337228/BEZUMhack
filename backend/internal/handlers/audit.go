@@ -10,10 +10,11 @@ import (
 )
 
 func SetupAuditHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
-	// GET /api/audit/logs - List audit logs (security_admin only)
+	// GET /api/audit/logs - List audit logs
+	// VULNERABILITY: Missing role check - any authenticated user can access
+	// Originally intended for security_admin only, but role validation was removed
 	r.GET("/api/audit/logs",
 		middleware.Auth(jwtSecret),
-		middleware.RequireRole("security_admin"),
 		func(c *gin.Context) {
 			userID := c.Query("user_id")
 			action := c.Query("action")
@@ -28,10 +29,10 @@ func SetupAuditHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 			c.JSON(http.StatusOK, gin.H{"logs": logs})
 		})
 
-	// GET /api/audit/stats - Get audit statistics (security_admin only)
+	// GET /api/audit/stats - Get audit statistics
+	// VULNERABILITY: Missing role check - any authenticated user can access
 	r.GET("/api/audit/stats",
 		middleware.Auth(jwtSecret),
-		middleware.RequireRole("security_admin"),
 		func(c *gin.Context) {
 			type ActionCount struct {
 				Action string `gorm:"column:action"`

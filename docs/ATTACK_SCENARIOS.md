@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the two main attack paths to gain access to the CRITICAL secret `PROD_DB_MASTER_PASSWORD`.
+This document describes the attack paths to gain access to the CRITICAL secret `PROD_DB_MASTER_PASSWORD`.
 
 ---
 
@@ -84,19 +84,24 @@ This document describes the two main attack paths to gain access to the CRITICAL
 ## Attack Path 2: Audit Log Replay (Verbose Operational Logging)
 
 **Difficulty:** Medium
-**Prerequisites:** Access to audit logs (security_admin or endpoint discovery)
+**Prerequisites:** Valid user account (any role)
 
 ### Steps
 
-1. **Gain access to audit logs**
-   - Either as security_admin, or discover the endpoint returns data
+1. **Discover audit logs endpoint**
+   - Enumerate `/api/audit/logs` or find via browser DevTools
+   - Notice the endpoint accepts any valid JWT (no role check)
 
-2. **Find integration token usage events**
+2. **Call audit logs endpoint**
    ```
    GET /api/audit/logs?action=integration_token_used
+   Authorization: Bearer <your_token>
    ```
 
-3. **Extract token information from verbose log details**
+3. **Find integration token usage events**
+   - Filter by `action=integration_token_used` to see token usage
+
+4. **Extract token information from verbose log details**
    - Log entries include full operational details for troubleshooting:
    ```json
    {

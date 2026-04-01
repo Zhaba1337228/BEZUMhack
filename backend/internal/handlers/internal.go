@@ -14,53 +14,6 @@ import (
 func SetupInternalHandler(r *gin.Engine, db *gorm.DB, jwtSecret string) {
 	auditService := service.NewAuditService(db)
 
-	// TEST endpoint - create access request via raw SQL
-	r.POST("/api/internal/test/grant", func(c *gin.Context) {
-		var req struct {
-			SecretID string `json:"secret_id"`
-			UserID   string `json:"user_id"`
-		}
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		// Create access request via raw SQL
-		var reqID string
-		err := db.Raw(`INSERT INTO access_requests (id, secret_id, user_id, justification, status, auto_approved, source, created_at, decided_at)
-			VALUES (gen_random_uuid(), ?, ?, 'Test', 'approved', true, 'test', NOW(), NOW()) RETURNING id`,
-			req.SecretID, req.UserID).Scan(&reqID).Error
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "SQL Error: " + err.Error()})
-			return
-		}
-
-		// Create grant
-		var grantID string
-		err = db.Raw(`INSERT INTO access_grants (id, request_id, secret_id, user_id, granted_at, expires_at, revoked)
-			VALUES (gen_random_uuid(), ?, ?, ?, NOW(), NOW() + INTERVAL '24 hours', false) RETURNING id`,
-			reqID, req.SecretID, req.UserID).Scan(&grantID).Error
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Grant SQL Error: " + err.Error()})
-			return
-		}
-
-		// Get secret value
-		var secretValue string
-		err = db.Raw("SELECT value FROM secrets WHERE id = ?", req.SecretID).Scan(&secretValue).Error
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Secret SQL Error: " + err.Error()})
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"success":       true,
-			"request_id":    reqID,
-			"grant_id":      grantID,
-			"secret_value":  secretValue,
-		})
-	})
-
 	// GET /api/internal/integrations/status - Integration health/status endpoint
 	// PATH 1 VULNERABILITY: Leaks auth_token for "debugging connectivity"
 	r.GET("/api/internal/integrations/status",
