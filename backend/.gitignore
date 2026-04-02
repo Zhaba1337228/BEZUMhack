@@ -6,8 +6,8 @@
 *.dylib
 *.test
 *.out
-server
-main
+/server
+/main
 
 # Dependencies
 vendor/
