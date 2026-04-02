@@ -69,7 +69,14 @@ docker compose up -d --build
 
 ```bash
 curl -s http://127.0.0.1:8080/health
-curl -I http://127.0.0.1:3000
+curl -I http://127.0.0.1
+```
+
+Если поднимаете стенд на IP `72.56.13.185`, используйте:
+
+```bash
+curl -s http://72.56.13.185:8080/health
+curl -I http://72.56.13.185
 ```
 
 <div style="page-break-after: always;"></div>
@@ -98,7 +105,7 @@ sed -i 's/flag{prod_db_master_[^}]\+}/YOUR_FLAG_HERE/g' /opt/secretflow/backend/
 
 | Service | Address | Description |
 |---|---|---|
-| secretflow-frontend | 0.0.0.0:3000 | Web UI |
+| secretflow-frontend | 0.0.0.0:80 | Web UI |
 | secretflow-backend | 0.0.0.0:8080 | API |
 | secretflow-db | internal docker network only | PostgreSQL |
 

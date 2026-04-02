@@ -6,28 +6,28 @@ import (
 )
 
 type Config struct {
-	DBHost       string
-	DBPort       string
-	DBName       string
-	DBUser       string
-	DBPassword   string
-	JWTSecret    string
-	JWTExpiry    int
-	BackendHost  string
-	BackendPort  string
-	FrontendURL  string
+	DBHost         string
+	DBPort         string
+	DBName         string
+	DBUser         string
+	DBPassword     string
+	JWTSecret      string
+	JWTExpiry      int
+	BackendHost    string
+	BackendPort    string
+	FrontendURL    string
 	AllowedOrigins []string
 }
 
 func Load() *Config {
 	cfg := &Config{
-		DBHost:     getEnv("DB_HOST", "localhost"),
-		DBPort:     getEnv("DB_PORT", "5432"),
-		DBName:     getEnv("DB_NAME", "secretflow"),
-		DBUser:     getEnv("DB_USER", "postgres"),
-		DBPassword: getEnv("DB_PASSWORD", "Rrobocopid12"),
-		JWTSecret:  getEnv("JWT_SECRET", "change_me_in_production"),
-		JWTExpiry:  24,
+		DBHost:      getEnv("DB_HOST", "localhost"),
+		DBPort:      getEnv("DB_PORT", "5432"),
+		DBName:      getEnv("DB_NAME", "secretflow"),
+		DBUser:      getEnv("DB_USER", "postgres"),
+		DBPassword:  getEnv("DB_PASSWORD", "Rrobocopid12"),
+		JWTSecret:   getEnv("JWT_SECRET", "change_me_in_production"),
+		JWTExpiry:   24,
 		BackendHost: getEnv("BACKEND_HOST", "0.0.0.0"),
 		BackendPort: getEnv("BACKEND_PORT", "8080"),
 		FrontendURL: getEnv("FRONTEND_URL", "http://localhost:5173"),
@@ -35,7 +35,16 @@ func Load() *Config {
 
 	// Parse allowed origins
 	origins := getEnv("ALLOWED_ORIGINS", "http://localhost:3000")
-	cfg.AllowedOrigins = strings.Split(origins, ",")
+	for _, origin := range strings.Split(origins, ",") {
+		trimmed := strings.TrimSpace(origin)
+		if trimmed != "" {
+			cfg.AllowedOrigins = append(cfg.AllowedOrigins, trimmed)
+		}
+	}
+
+	if len(cfg.AllowedOrigins) == 0 {
+		cfg.AllowedOrigins = []string{cfg.FrontendURL}
+	}
 
 	return cfg
 }

@@ -6,9 +6,10 @@ import (
 )
 
 type RouterConfig struct {
-	JWTSecret   string
-	JWTExpiry   int
-	FrontendURL string
+	JWTSecret      string
+	JWTExpiry      int
+	FrontendURL    string
+	AllowedOrigins []string
 }
 
 func SetupRouter(db *gorm.DB, cfg RouterConfig) *gin.Engine {
@@ -20,12 +21,15 @@ func SetupRouter(db *gorm.DB, cfg RouterConfig) *gin.Engine {
 	r.Use(func(c *gin.Context) {
 		// Check if origin is allowed
 		origin := c.Request.Header.Get("Origin")
-		allowedOrigins := []string{
-			cfg.FrontendURL,
-			"http://localhost:5173",
-			"http://localhost:3000",
-			"http://127.0.0.1:5173",
-			"http://127.0.0.1:3000",
+		allowedOrigins := cfg.AllowedOrigins
+		if len(allowedOrigins) == 0 {
+			allowedOrigins = []string{
+				cfg.FrontendURL,
+				"http://localhost:5173",
+				"http://localhost:3000",
+				"http://127.0.0.1:5173",
+				"http://127.0.0.1:3000",
+			}
 		}
 
 		allowed := false
@@ -38,7 +42,7 @@ func SetupRouter(db *gorm.DB, cfg RouterConfig) *gin.Engine {
 
 		if allowed {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
-		} else {
+		} else if cfg.FrontendURL != "" {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", cfg.FrontendURL)
 		}
 
