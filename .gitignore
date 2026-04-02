@@ -15,7 +15,6 @@ build/
 backend/bin/
 *.test
 *.out
-go.sum
 
 # Environment
 .env
