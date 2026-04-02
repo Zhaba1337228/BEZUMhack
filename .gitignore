@@ -12,7 +12,6 @@ build/
 *.dylib
 
 # Go
-backend/pkg/
 backend/bin/
 *.test
 *.out
