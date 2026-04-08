@@ -60,6 +60,7 @@ reboot now
 ## Запуск стенда
 
 ```bash
+cd ..
 cd /opt/secretflow
 cp .env.example .env
 docker compose up -d --build
