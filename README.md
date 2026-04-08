@@ -61,7 +61,7 @@ reboot now
 
 ```bash
 cd ..
-cd /opt/secretflow
+cd /opt/BEZUMhack
 cp .env.example .env
 docker compose up -d --build
 ```
