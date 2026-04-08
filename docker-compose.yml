@@ -34,6 +34,8 @@ services:
       BACKEND_HOST: ${BACKEND_HOST}
       FRONTEND_URL: ${FRONTEND_URL}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+    ports:
+      - "8080:8080"
     depends_on:
       db:
         condition: service_healthy
